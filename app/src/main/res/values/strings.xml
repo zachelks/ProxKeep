@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ProxKeep</string>
+
+    <!-- Top-level destinations -->
+    <string name="destination_overview">Overview</string>
+    <string name="destination_guests">Guests</string>
+    <string name="destination_infrastructure">Infrastructure</string>
+    <string name="destination_tasks">Tasks</string>
+
+    <!-- Shown on each destination before a server is added -->
+    <string name="empty_overview">Add a server to see cluster health here.</string>
+    <string name="empty_guests">Add a server to see its virtual machines and containers.</string>
+    <string name="empty_infrastructure">Add a server to see its nodes and storage.</string>
+    <string name="empty_tasks">Add a server to see running and recent tasks.</string>
+    <string name="tasks_not_yet">Tasks aren\'t available in this version yet.</string>
+    <string name="signed_out_message">You\'re signed out of %1$s.</string>
+
+    <!-- Actions -->
+    <string name="action_add_server">Add server</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_sign_out">Sign out</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_more">More options</string>
+    <string name="action_switch_to">Switch to %1$s</string>
+    <string name="action_remove_server">Remove %1$s</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+    <string name="action_back">Back</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_trust_certificate">Trust this certificate</string>
+    <string name="action_verify">Verify</string>
+
+    <string name="remove_server_title">Remove %1$s?</string>
+    <string name="remove_server_body">The server\'s address and saved sign-in are deleted from this device. Nothing changes on the server.</string>
+
+    <!-- Add server: address -->
+    <string name="add_server_title">Add server</string>
+    <string name="address_intro">Enter the address you use to open the server\'s web interface.</string>
+    <string name="field_address">Server address</string>
+    <string name="field_address_placeholder">192.168.1.10 or pve.example.com</string>
+    <string name="field_address_hint">Port 8006 is used unless you add another, such as :443.</string>
+    <string name="field_name">Name (optional)</string>
+    <string name="field_name_hint">How this server is labelled in the app.</string>
+
+    <!-- Add server: certificate -->
+    <string name="certificate_title">Check certificate</string>
+    <string name="certificate_unknown_heading">Your device doesn\'t recognize this server\'s certificate</string>
+    <string name="certificate_unknown_body">That is normal for a server that still uses the certificate it created for itself. Before you continue, compare the fingerprint below with the one shown on the server. If they match, the connection is to your server.</string>
+    <string name="certificate_changed_heading">This server\'s certificate has changed</string>
+    <string name="certificate_changed_body">The certificate is different from the one you trusted before. This happens when a certificate is renewed or replaced, and also when something is intercepting the connection. Continue only if the fingerprint below matches the one shown on the server.</string>
+    <string name="certificate_where_to_find">On the server, open the node, then System, then Certificates. The fingerprint is listed there.</string>
+    <string name="certificate_fingerprint">SHA-256 fingerprint</string>
+    <string name="certificate_subject">Issued to</string>
+    <string name="certificate_issuer">Issued by</string>
+    <string name="certificate_names">Valid for</string>
+    <string name="certificate_valid_until">Expires</string>
+
+    <!-- Add server: sign in -->
+    <string name="sign_in_title">Sign in</string>
+    <string name="method_password">Password</string>
+    <string name="method_token">API token</string>
+    <string name="field_username">User name</string>
+    <string name="field_realm">Realm</string>
+    <string name="field_password">Password</string>
+    <string name="password_not_stored">Your password isn\'t stored. You\'ll sign in again after the app has been closed.</string>
+    <string name="field_token_id">Token ID</string>
+    <string name="field_token_id_placeholder">root@pam!phone</string>
+    <string name="field_token_secret">Secret</string>
+    <string name="token_stored_encrypted">The secret is stored encrypted on this device, so you stay signed in.</string>
+
+    <!-- Add server: second factor -->
+    <string name="second_factor_title">Two-factor authentication</string>
+    <string name="second_factor_intro">Enter a code to finish signing in.</string>
+    <string name="factor_totp">Authenticator app code</string>
+    <string name="factor_recovery">Recovery key</string>
+    <string name="factor_yubico">YubiKey OTP</string>
+
+    <!-- Errors -->
+    <string name="error_invalid_address">That doesn\'t look like a server address. Use a host name or IP address, optionally followed by a port.</string>
+    <string name="error_missing_credentials">Enter your user name and password.</string>
+    <string name="error_invalid_token">Enter the full token ID, such as root@pam!phone, and its secret.</string>
+    <string name="error_missing_code">Enter the code.</string>
+    <string name="error_sign_in_rejected">The server didn\'t accept the sign-in. Check what you entered and try again.</string>
+    <string name="error_permission_denied">This account isn\'t allowed to do that.</string>
+    <string name="error_server_response">The server reported a problem.</string>
+    <string name="error_unknown_host">No server was found at that address. Check the spelling and your network connection.</string>
+    <string name="error_unreachable">The server didn\'t respond. Check the address and port, and that this device is on a network that can reach it.</string>
+    <string name="error_secure_connection">A secure connection couldn\'t be set up.</string>
+    <string name="error_generic">Something went wrong.</string>
+    <string name="error_certificate_changed_again">The server presented a different certificate again. Check the new fingerprint below.</string>
+    <string name="error_security_key_unsupported">This account signs in with a security key, which this version doesn\'t support yet. Use an API token instead.</string>
+    <string name="error_second_factor_unsupported">This account uses a second factor this version doesn\'t support. Use an API token instead.</string>
+    <string name="refresh_failed">Couldn\'t refresh. Showing the last data received.</string>
+
+    <!-- Cluster screens -->
+    <string name="version_label">Proxmox VE %1$s</string>
+    <!-- The quantity is the total, the second number. -->
+    <plurals name="summary_nodes">
+        <item quantity="one">%1$d of %2$d node online</item>
+        <item quantity="other">%1$d of %2$d nodes online</item>
+    </plurals>
+    <plurals name="summary_guests">
+        <item quantity="one">%1$d of %2$d guest running</item>
+        <item quantity="other">%1$d of %2$d guests running</item>
+    </plurals>
+    <string name="no_nodes_visible">This account can\'t see any nodes. It may be missing the Sys.Audit permission.</string>
+    <string name="no_guests">No virtual machines or containers are visible to this account.</string>
+    <string name="no_storage_visible">No storage is visible to this account.</string>
+    <string name="section_nodes">Nodes</string>
+    <string name="section_storage">Storage</string>
+    <string name="usage_cpu">CPU</string>
+    <plurals name="usage_cpu_cores">
+        <item quantity="one">%1$d core</item>
+        <item quantity="other">%1$d cores</item>
+    </plurals>
+    <string name="usage_memory">Memory</string>
+    <string name="usage_root_disk">Root disk</string>
+    <string name="usage_space">Space</string>
+    <string name="used_of_total">%1$s of %2$s</string>
+    <string name="uptime_label">Up %1$s</string>
+    <string name="kind_vm">VM</string>
+    <string name="kind_container">Container</string>
+
+    <!-- Status words -->
+    <string name="status_running">Running</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_available">Available</string>
+    <string name="status_template">Template</string>
+    <string name="status_unknown">Unknown</string>
+</resources>
