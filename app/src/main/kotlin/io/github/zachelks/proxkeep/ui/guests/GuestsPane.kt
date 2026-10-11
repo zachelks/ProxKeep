@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -84,14 +85,17 @@ fun GuestsPane(viewModel: MainViewModel, cluster: ClusterState.Loaded) {
                     MessageWithAction(message = stringResource(R.string.guest_select_prompt))
                 } else {
                     val resource = cluster.resources.firstOrNull { it.id == selectedId }
-                    GuestDetailPane(
-                        resource = resource,
-                        detail = detail?.takeIf { it.resourceId == selectedId },
-                        busyAction = busyGuests[selectedId],
-                        showBack = listIsHidden,
-                        onBack = { scope.launch { navigator.navigateBack() } },
-                        onAction = { action -> resource?.let { viewModel.runGuestAction(it, action) } },
-                    )
+                    // Keyed by guest so an open menu or confirmation never carries over to another guest.
+                    key(selectedId) {
+                        GuestDetailPane(
+                            resource = resource,
+                            detail = detail?.takeIf { it.resourceId == selectedId },
+                            busyAction = busyGuests[selectedId],
+                            showBack = listIsHidden,
+                            onBack = { scope.launch { navigator.navigateBack() } },
+                            onAction = { action -> resource?.let { viewModel.runGuestAction(it, action) } },
+                        )
+                    }
                 }
             }
         },

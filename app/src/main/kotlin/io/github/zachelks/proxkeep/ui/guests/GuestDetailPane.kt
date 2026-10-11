@@ -346,8 +346,15 @@ private fun ConfigCards(kind: ResourceKind, config: GuestConfig) {
         if (kind == ResourceKind.Lxc) {
             config.long("swap")?.let { add(stringResource(R.string.config_swap) to formatBytes(it * BYTES_PER_MIB)) }
         }
-        val cores = (config.long("cores") ?: 1L) * (config.long("sockets") ?: 1L)
-        add(stringResource(R.string.config_processors) to pluralStringResource(R.plurals.usage_cpu_cores, cores.toInt(), cores.toInt()))
+        // A virtual machine defaults to one socket with one core. A container
+        // with no core count may use every core of its node, so none is shown.
+        val cores = when (kind) {
+            ResourceKind.Lxc -> config.long("cores")
+            else -> (config.long("cores") ?: 1L) * (config.long("sockets") ?: 1L)
+        }?.toInt()
+        if (cores != null) {
+            add(stringResource(R.string.config_processors) to pluralStringResource(R.plurals.usage_cpu_cores, cores, cores))
+        }
         config["ostype"]?.let { add(stringResource(R.string.config_os_type) to it) }
         add(stringResource(R.string.config_start_at_boot) to if (config.flag("onboot") == true) yes else no)
         if (kind == ResourceKind.Qemu) {
