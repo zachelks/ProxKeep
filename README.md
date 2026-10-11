@@ -16,6 +16,7 @@ Early development. The app can:
 - show a guest's status, usage and configuration, and start, shut down,
   reboot, pause, resume, stop or reset it
 - list recent and running tasks and follow a task's log
+- lock itself behind the device's fingerprint, face or screen lock
 
 ## Modules
 

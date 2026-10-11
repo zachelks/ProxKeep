@@ -47,6 +47,7 @@ import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.ConfigDevice
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
+import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.ui.GuestDetail
 import io.github.zachelks.proxkeep.ui.cluster.StatusText
@@ -152,7 +153,7 @@ fun GuestDetailPane(
 
             val config = detail?.config
             when {
-                config != null -> ConfigCards(resource.kind, config)
+                config != null -> ConfigCards(resource.kind, config, detail.osInfo)
                 detail?.error == null -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -338,7 +339,7 @@ private fun UsageCard(resource: ClusterResource) {
 }
 
 @Composable
-private fun ConfigCards(kind: ResourceKind, config: GuestConfig) {
+private fun ConfigCards(kind: ResourceKind, config: GuestConfig, osInfo: GuestOsInfo?) {
     val yes = stringResource(R.string.value_yes)
     val no = stringResource(R.string.value_no)
     val rows = buildList {
@@ -355,7 +356,8 @@ private fun ConfigCards(kind: ResourceKind, config: GuestConfig) {
         if (cores != null) {
             add(stringResource(R.string.config_processors) to pluralStringResource(R.plurals.usage_cpu_cores, cores, cores))
         }
-        config["ostype"]?.let { add(stringResource(R.string.config_os_type) to it) }
+        osInfo?.displayName?.let { add(stringResource(R.string.config_operating_system) to it) }
+        config["ostype"]?.let { add(stringResource(R.string.config_os_type) to osTypeLabel(it)) }
         add(stringResource(R.string.config_start_at_boot) to if (config.flag("onboot") == true) yes else no)
         if (kind == ResourceKind.Qemu) {
             add(stringResource(R.string.config_guest_agent) to if (config.agentEnabled) yes else no)

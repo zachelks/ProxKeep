@@ -143,7 +143,8 @@
     <string name="config_memory">Memory</string>
     <string name="config_swap">Swap</string>
     <string name="config_processors">Processors</string>
-    <string name="config_os_type">OS type</string>
+    <string name="config_operating_system">Operating system</string>
+    <string name="config_os_type">Guest OS type</string>
     <string name="config_start_at_boot">Start at boot</string>
     <string name="config_guest_agent">QEMU guest agent</string>
     <string name="config_unprivileged">Unprivileged container</string>
@@ -254,4 +255,52 @@
     <string name="task_srvrestart">Restart service %1$s</string>
     <string name="task_srvreload">Reload service %1$s</string>
     <string name="task_download">Download %1$s</string>
+
+    <!-- Guest OS types. Each is a category chosen when the guest was created, not a detected system. -->
+    <string name="os_other">Other</string>
+    <string name="os_wxp" translatable="false">Microsoft Windows XP</string>
+    <string name="os_w2k" translatable="false">Microsoft Windows 2000</string>
+    <string name="os_w2k3" translatable="false">Microsoft Windows Server 2003</string>
+    <string name="os_w2k8" translatable="false">Microsoft Windows Server 2008</string>
+    <string name="os_wvista" translatable="false">Microsoft Windows Vista</string>
+    <string name="os_win7" translatable="false">Microsoft Windows 7</string>
+    <string name="os_win8">Microsoft Windows 8, Server 2012 or 2012 R2</string>
+    <string name="os_win10">Microsoft Windows 10, Server 2016 or 2019</string>
+    <string name="os_win11">Microsoft Windows 11, Server 2022 or 2025</string>
+    <string name="os_l24">Linux, 2.4 kernel</string>
+    <string name="os_l26">Linux, 2.6 kernel or newer</string>
+    <string name="os_solaris">Solaris, OpenSolaris or OpenIndiana</string>
+    <string name="os_unmanaged">Unmanaged</string>
+    <string name="os_debian" translatable="false">Debian</string>
+    <string name="os_devuan" translatable="false">Devuan</string>
+    <string name="os_ubuntu" translatable="false">Ubuntu</string>
+    <string name="os_centos" translatable="false">CentOS</string>
+    <string name="os_fedora" translatable="false">Fedora</string>
+    <string name="os_opensuse" translatable="false">openSUSE</string>
+    <string name="os_archlinux" translatable="false">Arch Linux</string>
+    <string name="os_alpine" translatable="false">Alpine Linux</string>
+    <string name="os_gentoo" translatable="false">Gentoo</string>
+    <string name="os_nixos" translatable="false">NixOS</string>
+
+    <!-- App lock -->
+    <string name="locked_title">ProxKeep is locked</string>
+    <string name="action_unlock">Unlock</string>
+    <string name="unlock_prompt_title">Unlock ProxKeep</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_summary">Ask for your fingerprint, face or screen lock before ProxKeep opens.</string>
+    <string name="settings_app_lock_unavailable">Set a screen lock on this device to use app lock.</string>
+    <string name="settings_lock_after">Lock after leaving the app</string>
+    <string name="lock_timeout_immediately">Immediately</string>
+    <string name="lock_timeout_1_minute">After 1 minute</string>
+    <string name="lock_timeout_5_minutes">After 5 minutes</string>
+    <string name="lock_timeout_15_minutes">After 15 minutes</string>
+    <string name="settings_about">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_license">License and source code</string>
+    <string name="about_license_summary">GNU General Public License, version 3 or later. Tap to open the source code on GitHub.</string>
+    <string name="about_trademark">ProxKeep is not affiliated with or endorsed by Proxmox Server Solutions GmbH. Proxmox is a registered trademark of Proxmox Server Solutions GmbH.</string>
 </resources>

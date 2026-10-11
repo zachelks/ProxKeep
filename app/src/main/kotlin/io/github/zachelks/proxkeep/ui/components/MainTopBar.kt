@@ -55,6 +55,7 @@ fun MainTopBar(title: String, viewModel: MainViewModel) {
                 onSwitch = viewModel::activate,
                 onSignOut = viewModel::signOut,
                 onRemove = viewModel::remove,
+                onSettings = viewModel::openSettings,
             )
         },
     )
@@ -69,6 +70,7 @@ private fun ServerMenu(
     onSwitch: (String) -> Unit,
     onSignOut: () -> Unit,
     onRemove: (String) -> Unit,
+    onSettings: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf<ServerProfile?>(null) }
@@ -125,6 +127,14 @@ private fun ServerMenu(
                     },
                 )
             }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.settings_title)) },
+                onClick = {
+                    expanded = false
+                    onSettings()
+                },
+            )
         }
     }
 
