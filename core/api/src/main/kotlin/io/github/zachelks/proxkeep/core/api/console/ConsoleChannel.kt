@@ -12,6 +12,7 @@ import okhttp3.WebSocketListener
 import okio.Buffer
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -153,7 +154,10 @@ class ConsoleChannel private constructor(
             listener: Listener,
         ): ConsoleChannel {
             val channel = ConsoleChannel(scope, listener, ticket)
-            channel.socket = http.newWebSocket(request, channel.SocketListener())
+            // An idle shell sends nothing for as long as nobody types, so the
+            // connection must not be given up for being quiet.
+            val patient = http.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).build()
+            channel.socket = patient.newWebSocket(request, channel.SocketListener())
             return channel
         }
     }
