@@ -4,6 +4,8 @@ import io.github.zachelks.proxkeep.core.api.auth.ApiTokenCredentials
 import io.github.zachelks.proxkeep.core.api.auth.LoginResult
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
+import io.github.zachelks.proxkeep.core.api.model.GuestAction
+import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -16,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -196,5 +199,123 @@ class PveClientTest {
         enqueue("<html><body>It works!</body></html>")
         val error = assertFailsWith<PveApiException> { client.version() }
         assertEquals(200, error.statusCode)
+    }
+
+    // --- Guests and tasks ------------------------------------------------
+
+    private val upid = "UPID:pve1:0001E2A4:02F3B6C1:6712F3A1:qmstart:100:root@pam:"
+
+    private fun segments(request: RecordedRequest): List<String> =
+        request.requestUrl!!.pathSegments.drop(2)
+
+    @Test
+    fun guestActionPostsWithTheCsrfTokenAndReturnsTheTaskId(): Unit = runBlocking {
+        enqueue("""{"data":"$upid"}""")
+        val signedIn = client.withCredentials(TicketCredentials("root@pam", ticket, "csrf-token"))
+
+        assertEquals(upid, signedIn.guestAction("pve1", ResourceKind.Qemu, 100, GuestAction.Start))
+
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals(listOf("nodes", "pve1", "qemu", "100", "status", "start"), segments(request))
+        assertEquals("csrf-token", request.getHeader("CSRFPreventionToken"))
+        assertEquals("PVEAuthCookie=$ticket", request.getHeader("Cookie"))
+    }
+
+    @Test
+    fun containerActionsUseTheContainerPath(): Unit = runBlocking {
+        enqueue("""{"data":"UPID:pve1:1:2:3:vzshutdown:101:root@pam:"}""")
+        val token = ApiTokenCredentials("root@pam!phone", "secret")
+
+        client.withCredentials(token).guestAction("pve1", ResourceKind.Lxc, 101, GuestAction.Shutdown)
+
+        val request = server.takeRequest()
+        assertEquals(listOf("nodes", "pve1", "lxc", "101", "status", "shutdown"), segments(request))
+        // API tokens need no CSRF token.
+        assertNull(request.getHeader("CSRFPreventionToken"))
+    }
+
+    @Test
+    fun actionsAContainerDoesNotHaveAreRefusedBeforeAnyRequest() {
+        assertFailsWith<IllegalArgumentException> {
+            runBlocking { client.guestAction("pve1", ResourceKind.Lxc, 101, GuestAction.Reset) }
+        }
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun guestStatusAndConfigAreRead(): Unit = runBlocking {
+        enqueue("""{"data":{"status":"running","qmpstatus":"running","name":"web","cpus":4,"mem":2147483648}}""")
+        enqueue("""{"data":{"cores":4,"memory":"4096","net0":"virtio=AA:BB,bridge=vmbr0","digest":"d"}}""")
+
+        val status = client.guestStatus("pve1", ResourceKind.Qemu, 100)
+        val config = client.guestConfig("pve1", ResourceKind.Qemu, 100)
+
+        assertTrue(status.isRunning)
+        assertFalse(status.isPaused)
+        assertEquals(4096L, config.long("memory"))
+        assertEquals(listOf("net0"), config.networks.map { it.key })
+        assertEquals(listOf("nodes", "pve1", "qemu", "100", "status", "current"), segments(server.takeRequest()))
+        assertEquals(listOf("nodes", "pve1", "qemu", "100", "config"), segments(server.takeRequest()))
+    }
+
+    @Test
+    fun clusterTasksAreListed(): Unit = runBlocking {
+        enqueue(
+            """{"data":[
+                {"upid":"$upid","node":"pve1","type":"qmstart","id":"100","user":"root@pam","starttime":1729000000},
+                {"upid":"UPID:pve1:1:2:3:vzdump:101:root@pam:","node":"pve1","type":"vzdump","id":"101",
+                 "user":"root@pam","starttime":1728990000,"endtime":1728990300,"status":"OK","saved":"1"}]}""",
+        )
+        val tasks = client.clusterTasks()
+
+        assertEquals(listOf(true, false), tasks.map { it.isRunning })
+        assertTrue(tasks.last().succeeded)
+        assertEquals(listOf("cluster", "tasks"), segments(server.takeRequest()))
+    }
+
+    @Test
+    fun taskLogIsReadFromAnOffset(): Unit = runBlocking {
+        enqueue("""{"data":[{"n":3,"t":"starting"},{"n":"4","t":"TASK OK"}],"total":4}""")
+
+        val lines = client.taskLog("pve1", upid, start = 2, limit = 100)
+
+        assertEquals(listOf(3 to "starting", 4 to "TASK OK"), lines.map { it.n to it.t })
+        val request = server.takeRequest()
+        // The task ID travels as one path segment, punctuation and all.
+        assertEquals(listOf("nodes", "pve1", "tasks", upid, "log"), segments(request))
+        assertEquals("2", request.requestUrl!!.queryParameter("start"))
+        assertEquals("100", request.requestUrl!!.queryParameter("limit"))
+    }
+
+    @Test
+    fun awaitTaskPollsUntilTheTaskStops(): Unit = runBlocking {
+        enqueue("""{"data":{"status":"running","type":"qmstart","id":"100"}}""")
+        enqueue("""{"data":{"status":"running","type":"qmstart","id":"100"}}""")
+        enqueue("""{"data":{"status":"stopped","exitstatus":"OK","type":"qmstart","id":"100"}}""")
+
+        val result = client.awaitTask("pve1", upid, pollIntervalMs = 1)
+
+        assertTrue(result.succeeded)
+        assertEquals(3, server.requestCount)
+        assertEquals(listOf("nodes", "pve1", "tasks", upid, "status"), segments(server.takeRequest()))
+    }
+
+    @Test
+    fun awaitTaskReportsAFailedTask(): Unit = runBlocking {
+        enqueue("""{"data":{"status":"stopped","exitstatus":"can't lock file - got timeout"}}""")
+
+        val result = client.awaitTask("pve1", upid, pollIntervalMs = 1)
+
+        assertFalse(result.succeeded)
+        assertEquals("can't lock file - got timeout", result.exitstatus)
+    }
+
+    @Test
+    fun awaitTaskDoesNotRetryAnErrorFromTheServer(): Unit = runBlocking {
+        enqueue("""{"data":null}""", code = 403, reason = "Permission check failed")
+
+        assertFailsWith<PveApiException> { client.awaitTask("pve1", upid, pollIntervalMs = 1) }
+        assertEquals(1, server.requestCount)
     }
 }

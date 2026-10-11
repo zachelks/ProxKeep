@@ -8,9 +8,14 @@ GmbH. Proxmox is a registered trademark of Proxmox Server Solutions GmbH.
 
 ## Status
 
-Early development. The app can add a server, check its certificate, sign in
-with a password (including TOTP) or an API token, and list nodes, guests and
-storage.
+Early development. The app can:
+
+- add a server, check its certificate, and sign in with a password
+  (including TOTP) or an API token
+- list nodes, guests and storage
+- show a guest's status, usage and configuration, and start, shut down,
+  reboot, pause, resume, stop or reset it
+- list recent and running tasks and follow a task's log
 
 ## Modules
 

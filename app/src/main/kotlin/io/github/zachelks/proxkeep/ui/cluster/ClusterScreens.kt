@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
@@ -28,7 +27,6 @@ import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.data.ServerProfile
 import io.github.zachelks.proxkeep.ui.ClusterState
-import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
 import io.github.zachelks.proxkeep.ui.components.UsageBar
 import io.github.zachelks.proxkeep.ui.format.formatBytes
@@ -40,7 +38,7 @@ private val ScreenPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
 
 /** Shown above a list when its data could not be refreshed. */
 @Composable
-private fun StaleBanner(state: ClusterState.Loaded) {
+fun StaleBanner(state: ClusterState.Loaded) {
     val error = state.refreshError ?: return
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
@@ -167,56 +165,6 @@ private fun NodeCard(node: ClusterResource) {
 @Composable
 private fun usedOfTotal(used: Long?, total: Long?): String =
     stringResource(R.string.used_of_total, formatBytes(used ?: 0), formatBytes(total ?: 0))
-
-// --- Guests ------------------------------------------------------------------
-
-@Composable
-fun GuestsScreen(state: ClusterState.Loaded, modifier: Modifier = Modifier) {
-    val guests = state.resources.filter { it.isGuest }.sortedBy { it.vmid ?: Int.MAX_VALUE }
-
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        if (state.refreshError != null) {
-            item(key = "stale") {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { StaleBanner(state) }
-            }
-        }
-        if (guests.isEmpty()) {
-            item(key = "empty") {
-                MessageWithAction(message = stringResource(R.string.no_guests))
-            }
-        }
-        items(guests, key = { it.id }) { guest ->
-            GuestRow(guest)
-            HorizontalDivider()
-        }
-    }
-}
-
-@Composable
-private fun GuestRow(guest: ClusterResource) {
-    val status = guest.statusText()
-    val kind = stringResource(if (guest.kind == ResourceKind.Lxc) R.string.kind_container else R.string.kind_vm)
-    val details = listOfNotNull(
-        guest.vmid?.toString(),
-        kind,
-        guest.node,
-    ).joinToString(" · ")
-    ListItem(
-        headlineContent = { Text(guest.name ?: guest.id) },
-        supportingContent = {
-            Column {
-                Text(details)
-                if (guest.tagList.isNotEmpty()) {
-                    Text(
-                        text = guest.tagList.joinToString("  ") { "#$it" },
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-        },
-        trailingContent = { StatusLabel(text = status.text, tone = status.tone) },
-    )
-}
 
 // --- Infrastructure ----------------------------------------------------------
 
