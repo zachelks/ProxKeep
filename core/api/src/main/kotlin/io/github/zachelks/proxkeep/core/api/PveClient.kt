@@ -6,6 +6,9 @@ import io.github.zachelks.proxkeep.core.api.auth.LoginResult
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.auth.TfaChallenge
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
+import io.github.zachelks.proxkeep.core.api.console.ConsoleChannel
+import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
+import io.github.zachelks.proxkeep.core.api.console.TermProxyTicket
 import io.github.zachelks.proxkeep.core.api.json.PveJson
 import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
 import io.github.zachelks.proxkeep.core.api.model.AgentResult
@@ -21,6 +24,7 @@ import io.github.zachelks.proxkeep.core.api.model.TaskStatus
 import io.github.zachelks.proxkeep.core.api.model.TaskSummary
 import io.github.zachelks.proxkeep.core.api.model.TicketResponse
 import io.github.zachelks.proxkeep.core.api.model.VersionInfo
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
@@ -164,6 +168,36 @@ class PveClient(
             else -> throw IllegalArgumentException("$kind is not a guest")
         }
         return listOf("nodes", node, type, vmid.toString())
+    }
+
+    // --- Consoles --------------------------------------------------------
+
+    /**
+     * Opens a text console: asks the server to start a terminal process, then
+     * connects to it. Returns as soon as the connection is under way;
+     * [listener] learns whether it succeeded.
+     *
+     * @param scope runs the channel's keep-alive; cancelling it does not close the channel
+     * @throws PveApiException when the server refuses to start the terminal
+     */
+    suspend fun openConsole(
+        target: ConsoleTarget,
+        scope: CoroutineScope,
+        listener: ConsoleChannel.Listener,
+    ): ConsoleChannel {
+        val base = when (target) {
+            is ConsoleTarget.NodeShell -> listOf("nodes", target.node)
+            is ConsoleTarget.Guest -> guestPath(target.node, target.kind, target.vmid)
+        }
+        val ticket = call(post(base + "termproxy", emptyMap()), TermProxyTicket.serializer())
+        // The websocket is authenticated twice: by the session's credentials on
+        // the request, and by the one-time ticket once it is open.
+        val query = mapOf("port" to ticket.port.toString(), "vncticket" to ticket.ticket)
+        val request = builder(base + "vncwebsocket", query, authenticated = true)
+            .header("Sec-WebSocket-Protocol", "binary")
+            .get()
+            .build()
+        return ConsoleChannel.connect(http, request, ticket, scope, listener)
     }
 
     // --- Tasks -----------------------------------------------------------
