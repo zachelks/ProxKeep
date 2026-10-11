@@ -28,7 +28,7 @@ jobs:
       - name: Test, build and lint
         run: |
           set -o pipefail
-          ./gradlew :core:api:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --stacktrace 2>&1 | tee build.log
+          ./gradlew :core:api:test :terminal:emulator:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --stacktrace 2>&1 | tee build.log
 
       # Repeats failures as annotations, which are readable through the API.
       - name: Report results
@@ -50,4 +50,5 @@ jobs:
           path: |
             app/build/reports/
             core/api/build/reports/
+            terminal/emulator/build/reports/
           if-no-files-found: ignore
