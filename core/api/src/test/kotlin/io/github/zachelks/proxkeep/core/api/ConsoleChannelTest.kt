@@ -77,6 +77,11 @@ class ConsoleChannelTest {
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
             received.add(bytes.utf8())
         }
+
+        // Answer the client's goodbye, as a real server does, so the connection ends cleanly.
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            webSocket.close(code, null)
+        }
     }
 
     private fun next(queue: LinkedBlockingQueue<String>): String? = queue.poll(5, TimeUnit.SECONDS)
