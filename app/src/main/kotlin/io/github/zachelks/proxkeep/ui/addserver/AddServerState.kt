@@ -95,7 +95,7 @@ class AddServerState(
             return
         }
         // A pinned fingerprint belongs to one address and is not carried to another.
-        val knownPin = if (parsed == existing?.address) existing?.pinnedSha256 else null
+        val knownPin = existing?.takeIf { it.address == parsed }?.pinnedSha256
         launch {
             when (val result = repository.probe(parsed, knownPin)) {
                 is ProbeResult.Reachable -> {

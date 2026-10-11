@@ -97,15 +97,25 @@
 
     <!-- Cluster screens -->
     <string name="version_label">Proxmox VE %1$s</string>
-    <string name="summary_nodes">%1$d of %2$d nodes online</string>
-    <string name="summary_guests">%1$d of %2$d guests running</string>
+    <!-- The quantity is the total, the second number. -->
+    <plurals name="summary_nodes">
+        <item quantity="one">%1$d of %2$d node online</item>
+        <item quantity="other">%1$d of %2$d nodes online</item>
+    </plurals>
+    <plurals name="summary_guests">
+        <item quantity="one">%1$d of %2$d guest running</item>
+        <item quantity="other">%1$d of %2$d guests running</item>
+    </plurals>
     <string name="no_nodes_visible">This account can\'t see any nodes. It may be missing the Sys.Audit permission.</string>
     <string name="no_guests">No virtual machines or containers are visible to this account.</string>
     <string name="no_storage_visible">No storage is visible to this account.</string>
     <string name="section_nodes">Nodes</string>
     <string name="section_storage">Storage</string>
     <string name="usage_cpu">CPU</string>
-    <string name="usage_cpu_cores">%1$d cores</string>
+    <plurals name="usage_cpu_cores">
+        <item quantity="one">%1$d core</item>
+        <item quantity="other">%1$d cores</item>
+    </plurals>
     <string name="usage_memory">Memory</string>
     <string name="usage_root_disk">Root disk</string>
     <string name="usage_space">Space</string>

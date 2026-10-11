@@ -4,11 +4,13 @@
   as well as the system ones, so servers with certificates from a private CA
   work without pinning.
 -->
-<network-security-config>
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
+            <certificates
+                src="user"
+                tools:ignore="AcceptsUserCertificates" />
         </trust-anchors>
     </base-config>
 </network-security-config>

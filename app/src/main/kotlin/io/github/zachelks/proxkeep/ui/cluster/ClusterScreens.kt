@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.zachelks.proxkeep.R
@@ -97,8 +98,8 @@ fun OverviewScreen(profile: ServerProfile, state: ClusterState.Loaded, modifier:
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        text = stringResource(R.string.summary_nodes, online, nodes.size) + " · " +
-                            stringResource(R.string.summary_guests, running, guests.size),
+                        text = pluralStringResource(R.plurals.summary_nodes, nodes.size, online, nodes.size) + " · " +
+                            pluralStringResource(R.plurals.summary_guests, guests.size, running, guests.size),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -135,7 +136,7 @@ private fun NodeCard(node: ClusterResource) {
                 UsageBar(
                     label = stringResource(R.string.usage_cpu),
                     fraction = cpu,
-                    detail = stringResource(R.string.usage_cpu_cores, cores),
+                    detail = pluralStringResource(R.plurals.usage_cpu_cores, cores, cores),
                 )
             }
             usageFraction(node.mem, node.maxmem)?.let { fraction ->
