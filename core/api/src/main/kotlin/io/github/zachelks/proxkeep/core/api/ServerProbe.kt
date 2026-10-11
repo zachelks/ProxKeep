@@ -6,7 +6,6 @@ import io.github.zachelks.proxkeep.core.api.tls.ServerTrust
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import java.io.IOException
-import javax.net.ssl.SSLException
 
 /** What a first contact with a server found. */
 sealed interface ProbeResult {
@@ -50,10 +49,8 @@ suspend fun probeServer(
     return try {
         val realms = client.realms()
         ProbeResult.Reachable(realms, trust.lastServerCertificate?.let(CertificateInfo::from))
-    } catch (e: SSLException) {
-        val presented = trust.lastServerCertificate
-        if (presented != null) ProbeResult.UntrustedCertificate(CertificateInfo.from(presented)) else ProbeResult.Failed(e)
     } catch (e: IOException) {
-        ProbeResult.Failed(e)
+        val rejected = trust.rejectedCertificate
+        if (rejected != null) ProbeResult.UntrustedCertificate(CertificateInfo.from(rejected)) else ProbeResult.Failed(e)
     }
 }

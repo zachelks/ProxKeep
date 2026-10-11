@@ -47,6 +47,17 @@ class ServerTrust(
     var lastServerCertificate: X509Certificate? = null
         private set
 
+    /**
+     * The certificate this object most recently refused, or null if it has
+     * refused none. Callers use this, not the type of the exception a failed
+     * request throws, to tell a certificate problem from a network problem:
+     * when a host has several addresses the exception may describe a
+     * different address than the one whose certificate was refused.
+     */
+    @Volatile
+    var rejectedCertificate: X509Certificate? = null
+        private set
+
     /** Returns a copy of [client] that applies this trust decision. */
     fun applyTo(client: OkHttpClient): OkHttpClient = client.newBuilder()
         .sslSocketFactory(socketFactory, trustManager)
@@ -65,7 +76,12 @@ class ServerTrust(
                 ?: throw CertificateException("The server sent no certificate")
             lastServerCertificate = leaf
             if (matchesPin(leaf)) return
-            delegate.checkServerTrusted(chain, authType)
+            try {
+                delegate.checkServerTrusted(chain, authType)
+            } catch (e: CertificateException) {
+                rejectedCertificate = leaf
+                throw e
+            }
         }
 
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
@@ -87,7 +103,9 @@ class ServerTrust(
                 null
             }
             if (leaf != null && matchesPin(leaf)) return true
-            return delegate.verify(hostname, session)
+            val matchesHost = delegate.verify(hostname, session)
+            if (!matchesHost && leaf != null) rejectedCertificate = leaf
+            return matchesHost
         }
     }
 

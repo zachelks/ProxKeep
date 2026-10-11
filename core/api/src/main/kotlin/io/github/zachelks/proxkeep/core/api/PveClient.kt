@@ -188,7 +188,7 @@ class PveClient(
             override fun onResponse(call: Call, response: Response) {
                 val raw = try {
                     response.use {
-                        RawResponse(it.code, it.message, it.body?.string().orEmpty(), it.headers("Set-Cookie"))
+                        RawResponse(it.code, it.message, it.body.string(), it.headers("Set-Cookie"))
                     }
                 } catch (e: IOException) {
                     continuation.resumeWithException(e)
