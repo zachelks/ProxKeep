@@ -37,6 +37,7 @@ import io.github.zachelks.proxkeep.ui.components.MainTopBar
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.guests.GuestsPane
 import io.github.zachelks.proxkeep.ui.guests.message
+import io.github.zachelks.proxkeep.ui.settings.SettingsScreen
 import io.github.zachelks.proxkeep.ui.tasks.TasksPane
 import kotlinx.coroutines.delay
 
@@ -53,6 +54,10 @@ fun AppShell(viewModel: MainViewModel = viewModel(factory = MainViewModel.Factor
     val flow = viewModel.addServer
     if (flow != null) {
         AddServerFlow(state = flow, onClose = viewModel::closeAddServer)
+        return
+    }
+    if (viewModel.settingsOpen) {
+        SettingsScreen(onClose = viewModel::closeSettings)
         return
     }
 

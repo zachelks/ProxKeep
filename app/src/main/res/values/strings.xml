@@ -281,4 +281,26 @@
     <string name="os_alpine" translatable="false">Alpine Linux</string>
     <string name="os_gentoo" translatable="false">Gentoo</string>
     <string name="os_nixos" translatable="false">NixOS</string>
+
+    <!-- App lock -->
+    <string name="locked_title">ProxKeep is locked</string>
+    <string name="action_unlock">Unlock</string>
+    <string name="unlock_prompt_title">Unlock ProxKeep</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_summary">Ask for your fingerprint, face or screen lock before ProxKeep opens.</string>
+    <string name="settings_app_lock_unavailable">Set a screen lock on this device to use app lock.</string>
+    <string name="settings_lock_after">Lock after leaving the app</string>
+    <string name="lock_timeout_immediately">Immediately</string>
+    <string name="lock_timeout_1_minute">After 1 minute</string>
+    <string name="lock_timeout_5_minutes">After 5 minutes</string>
+    <string name="lock_timeout_15_minutes">After 15 minutes</string>
+    <string name="settings_about">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_license">License and source code</string>
+    <string name="about_license_summary">GNU General Public License, version 3 or later. Tap to open the source code on GitHub.</string>
+    <string name="about_trademark">ProxKeep is not affiliated with or endorsed by Proxmox Server Solutions GmbH. Proxmox is a registered trademark of Proxmox Server Solutions GmbH.</string>
 </resources>

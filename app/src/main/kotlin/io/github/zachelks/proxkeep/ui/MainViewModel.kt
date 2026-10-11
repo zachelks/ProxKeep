@@ -126,6 +126,18 @@ class MainViewModel(private val repository: ServerRepository) : ViewModel() {
     val tasks: StateFlow<TasksState> = _tasks.asStateFlow()
     private var tasksVisible = false
 
+    /** Whether the Settings screen is open. */
+    var settingsOpen by mutableStateOf(false)
+        private set
+
+    fun openSettings() {
+        settingsOpen = true
+    }
+
+    fun closeSettings() {
+        settingsOpen = false
+    }
+
     private val refreshMutex = Mutex()
     private var cachedVersion: Pair<String, VersionInfo>? = null
 

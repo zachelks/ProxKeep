@@ -2,9 +2,16 @@ package io.github.zachelks.proxkeep
 
 import android.app.Application
 import android.content.Context
+import android.os.SystemClock
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import io.github.zachelks.proxkeep.data.AppSettings
 import io.github.zachelks.proxkeep.data.ProfileStore
 import io.github.zachelks.proxkeep.data.SecretBox
 import io.github.zachelks.proxkeep.data.ServerRepository
+import io.github.zachelks.proxkeep.security.AppLock
+import io.github.zachelks.proxkeep.security.Authenticator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,7 +21,23 @@ import java.util.concurrent.TimeUnit
 
 class ProxKeepApplication : Application() {
     /** Objects that live as long as the process. */
-    val container: AppContainer by lazy { AppContainer(this) }
+    lateinit var container: AppContainer
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        container = AppContainer(this)
+
+        // The process lifecycle starts and stops with the app as a whole, not
+        // with single screens, so rotating the device is not an absence.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) = container.appLock.onForeground()
+
+                override fun onStop(owner: LifecycleOwner) = container.appLock.onBackground()
+            },
+        )
+    }
 }
 
 class AppContainer(context: Context) {
@@ -33,6 +56,16 @@ class AppContainer(context: Context) {
         http = http,
         scope = scope,
     )
+
+    val settings = AppSettings(context)
+
+    val appLock = AppLock(
+        isEnabled = { settings.lockEnabled.value },
+        timeoutMs = { settings.lockTimeout.value.millis },
+        now = SystemClock::elapsedRealtime,
+    )
+
+    val authenticator = Authenticator(appLock)
 
     private companion object {
         const val CONNECT_TIMEOUT_SECONDS = 10L
