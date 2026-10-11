@@ -9,14 +9,23 @@ import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.json.PveJson
 import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
+import io.github.zachelks.proxkeep.core.api.model.GuestAction
+import io.github.zachelks.proxkeep.core.api.model.GuestConfig
+import io.github.zachelks.proxkeep.core.api.model.GuestStatus
 import io.github.zachelks.proxkeep.core.api.model.Realm
+import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.TaskLogLine
+import io.github.zachelks.proxkeep.core.api.model.TaskStatus
+import io.github.zachelks.proxkeep.core.api.model.TaskSummary
 import io.github.zachelks.proxkeep.core.api.model.TicketResponse
 import io.github.zachelks.proxkeep.core.api.model.VersionInfo
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.FormBody
@@ -53,7 +62,7 @@ class PveClient(
 
     /** Lists the realms a person can sign in to. Needs no credentials. */
     suspend fun realms(): List<Realm> =
-        call(get("access/domains", authenticated = false), ListSerializer(Realm.serializer()))
+        call(get(listOf("access", "domains"), authenticated = false), ListSerializer(Realm.serializer()))
 
     /**
      * Signs in with a password.
@@ -91,7 +100,7 @@ class PveClient(
     }
 
     private suspend fun requestTicket(userId: String, form: Map<String, String>): LoginResult {
-        val raw = execute(post("access/ticket", form, authenticated = false))
+        val raw = execute(post(listOf("access", "ticket"), form, authenticated = false))
         val response = decode(raw, TicketResponse.serializer())
         val ticket = response.ticket
             ?: ticketFromCookies(raw.setCookies)
@@ -105,20 +114,73 @@ class PveClient(
         }
     }
 
-    // --- Read calls ------------------------------------------------------
+    // --- Cluster ---------------------------------------------------------
 
     suspend fun version(): VersionInfo =
-        call(get("version"), VersionInfo.serializer())
+        call(get(listOf("version")), VersionInfo.serializer())
 
     /** Every node, guest and storage in the cluster, in one call. */
     suspend fun clusterResources(): List<ClusterResource> =
-        call(get("cluster/resources"), ListSerializer(ClusterResource.serializer()))
+        call(get(listOf("cluster", "resources")), ListSerializer(ClusterResource.serializer()))
+
+    // --- Guests ----------------------------------------------------------
+
+    suspend fun guestStatus(node: String, kind: ResourceKind, vmid: Int): GuestStatus =
+        call(get(guestPath(node, kind, vmid) + listOf("status", "current")), GuestStatus.serializer())
+
+    suspend fun guestConfig(node: String, kind: ResourceKind, vmid: Int): GuestConfig =
+        GuestConfig.fromJson(call(get(guestPath(node, kind, vmid) + "config"), JsonObject.serializer()))
+
+    /**
+     * Starts a power action. The server queues it as a task and answers at
+     * once; use [awaitTask] with the returned task ID to learn how it went.
+     *
+     * @return the task's UPID
+     */
+    suspend fun guestAction(node: String, kind: ResourceKind, vmid: Int, action: GuestAction): String {
+        require(action.supports(kind)) { "${action.name} is not available for $kind guests" }
+        val path = guestPath(node, kind, vmid) + listOf("status", action.apiName)
+        return call(post(path, emptyMap()), String.serializer())
+    }
+
+    private fun guestPath(node: String, kind: ResourceKind, vmid: Int): List<String> {
+        val type = when (kind) {
+            ResourceKind.Qemu -> "qemu"
+            ResourceKind.Lxc -> "lxc"
+            else -> throw IllegalArgumentException("$kind is not a guest")
+        }
+        return listOf("nodes", node, type, vmid.toString())
+    }
+
+    // --- Tasks -----------------------------------------------------------
+
+    /** Recent and running tasks across the cluster, newest first. */
+    suspend fun clusterTasks(): List<TaskSummary> =
+        call(get(listOf("cluster", "tasks")), ListSerializer(TaskSummary.serializer()))
+
+    suspend fun taskStatus(node: String, upid: String): TaskStatus =
+        call(get(listOf("nodes", node, "tasks", upid, "status")), TaskStatus.serializer())
+
+    /**
+     * Reads part of a task's log.
+     *
+     * @param start how many lines to skip from the top
+     * @param limit the most lines to return
+     */
+    suspend fun taskLog(node: String, upid: String, start: Int = 0, limit: Int = 500): List<TaskLogLine> {
+        val query = mapOf("start" to start.toString(), "limit" to limit.toString())
+        return call(get(listOf("nodes", node, "tasks", upid, "log"), query = query), ListSerializer(TaskLogLine.serializer()))
+    }
 
     // --- Plumbing --------------------------------------------------------
 
-    private fun builder(path: String, authenticated: Boolean): Request.Builder {
+    /** [path] holds one entry per path segment, so values such as task IDs are escaped as a whole. */
+    private fun builder(path: List<String>, query: Map<String, String>, authenticated: Boolean): Request.Builder {
+        val url = baseUrl.newBuilder()
+        path.forEach { url.addPathSegment(it) }
+        query.forEach { (name, value) -> url.addQueryParameter(name, value) }
         val request = Request.Builder()
-            .url(baseUrl.newBuilder().addPathSegments(path).build())
+            .url(url.build())
             .header("Accept", "application/json")
         if (authenticated) {
             when (val current = credentials) {
@@ -130,12 +192,15 @@ class PveClient(
         return request
     }
 
-    private fun get(path: String, authenticated: Boolean = true): Request =
-        builder(path, authenticated).get().build()
+    private fun get(
+        path: List<String>,
+        query: Map<String, String> = emptyMap(),
+        authenticated: Boolean = true,
+    ): Request = builder(path, query, authenticated).get().build()
 
-    private fun post(path: String, form: Map<String, String>, authenticated: Boolean = true): Request {
+    private fun post(path: List<String>, form: Map<String, String>, authenticated: Boolean = true): Request {
         val body = FormBody.Builder().apply { form.forEach { (name, value) -> add(name, value) } }.build()
-        val request = builder(path, authenticated).post(body)
+        val request = builder(path, emptyMap(), authenticated).post(body)
         // Tickets must prove write requests were not forged; API tokens need no such proof.
         val csrfToken = (credentials as? TicketCredentials)?.csrfToken
         if (authenticated && csrfToken != null) request.header("CSRFPreventionToken", csrfToken)
