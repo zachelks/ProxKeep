@@ -21,7 +21,7 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
     api(libs.okhttp)
 
-    testImplementation(kotlin("test-junit"))
+    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.okhttp.tls)
 }

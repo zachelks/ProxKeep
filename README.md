@@ -8,7 +8,9 @@ GmbH. Proxmox is a registered trademark of Proxmox Server Solutions GmbH.
 
 ## Status
 
-Early development. The app currently shows its navigation shell only.
+Early development. The app can add a server, check its certificate, sign in
+with a password (including TOTP) or an API token, and list nodes, guests and
+storage.
 
 ## Modules
 
@@ -25,6 +27,7 @@ Studio installs both.
 ```sh
 ./gradlew :app:assembleDebug     # build a debug APK
 ./gradlew :core:api:test         # run the API module's unit tests
+./gradlew :app:testDebugUnitTest # run the app module's unit tests
 ./gradlew :app:lintDebug         # run Android lint
 ```
 
