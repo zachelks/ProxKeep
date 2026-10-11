@@ -26,10 +26,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Test, build and lint
-        run: ./gradlew :core:api:test :app:assembleDebug :app:lintDebug --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :core:api:test :app:assembleDebug :app:lintDebug --stacktrace 2>&1 | tee build.log
+
+      # Repeats failures as annotations, which are readable through the API.
+      - name: Report results
+        if: always()
+        run: python3 .github/scripts/report_results.py build.log
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
@@ -37,7 +44,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: reports
           path: |
