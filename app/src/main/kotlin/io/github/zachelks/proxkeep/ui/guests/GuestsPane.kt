@@ -94,6 +94,7 @@ fun GuestsPane(viewModel: MainViewModel, cluster: ClusterState.Loaded) {
                             showBack = listIsHidden,
                             onBack = { scope.launch { navigator.navigateBack() } },
                             onAction = { action -> resource?.let { viewModel.runGuestAction(it, action) } },
+                            onOpenConsole = { resource?.let { viewModel.openGuestConsole(it) } },
                         )
                     }
                 }

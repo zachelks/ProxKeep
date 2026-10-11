@@ -39,6 +39,7 @@ android {
 
 dependencies {
     implementation(project(":core:api"))
+    implementation(project(":terminal:view"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

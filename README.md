@@ -16,6 +16,8 @@ Early development. The app can:
 - show a guest's status, usage and configuration, and start, shut down,
   reboot, pause, resume, stop or reset it
 - list recent and running tasks and follow a task's log
+- open a terminal on a node, in a container, or on a virtual machine's
+  serial port
 - lock itself behind the device's fingerprint, face or screen lock
 
 ## Modules
@@ -23,7 +25,8 @@ Early development. The app can:
 | Module | Purpose |
 | --- | --- |
 | `app` | The Android application: theme, navigation shell, screens |
-| `core:api` | Proxmox API models and JSON parsing. Plain Kotlin, no Android dependencies |
+| `core:api` | Proxmox API client, models and JSON parsing. Plain Kotlin, no Android dependencies |
+| `terminal:emulator`, `terminal:view` | Terminal emulation and the view that draws it, from Termux. See [terminal/README.md](terminal/README.md) |
 
 ## Building
 
@@ -42,4 +45,10 @@ workflow run as the `app-debug` artifact.
 
 ## License
 
-GNU General Public License, version 3 or later. See [LICENSE](LICENSE).
+ProxKeep is free software under the GNU General Public License, version 3.
+See [LICENSE](LICENSE).
+
+ProxKeep's own code may also be used under any later version of that license.
+The terminal modules in `terminal/` come from Termux and are licensed under
+version 3 only, which is why the app as a whole is distributed under version 3.
+See [terminal/README.md](terminal/README.md).

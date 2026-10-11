@@ -12,6 +12,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,6 +34,7 @@ import io.github.zachelks.proxkeep.ui.addserver.AddServerFlow
 import io.github.zachelks.proxkeep.ui.cluster.InfrastructureScreen
 import io.github.zachelks.proxkeep.ui.cluster.OverviewScreen
 import io.github.zachelks.proxkeep.ui.components.CenteredProgress
+import io.github.zachelks.proxkeep.ui.console.TerminalScreen
 import io.github.zachelks.proxkeep.ui.components.MainTopBar
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.guests.GuestsPane
@@ -58,6 +60,19 @@ fun AppShell(viewModel: MainViewModel = viewModel(factory = MainViewModel.Factor
     }
     if (viewModel.settingsOpen) {
         SettingsScreen(onClose = viewModel::closeSettings)
+        return
+    }
+    val console by viewModel.console.collectAsStateWithLifecycle()
+    val openConsole = console
+    if (openConsole != null) {
+        // Keyed so a reconnect, which is a new session, gets a fresh terminal view.
+        key(openConsole.id) {
+            TerminalScreen(
+                console = openConsole,
+                onClose = viewModel::closeConsole,
+                onReconnect = viewModel::reconnectConsole,
+            )
+        }
         return
     }
 
@@ -106,6 +121,7 @@ fun AppShell(viewModel: MainViewModel = viewModel(factory = MainViewModel.Factor
                             onAddServer = viewModel::startAddServer,
                             onSignIn = viewModel::startSignIn,
                             onRetry = viewModel::refreshNow,
+                            onOpenShell = viewModel::openNodeShell,
                         )
                     }
                 }
@@ -144,6 +160,7 @@ private fun SinglePaneContent(
     onAddServer: () -> Unit,
     onSignIn: (ServerProfile) -> Unit,
     onRetry: () -> Unit,
+    onOpenShell: (String) -> Unit,
 ) {
     if (!loaded) {
         CenteredProgress()
@@ -169,7 +186,7 @@ private fun SinglePaneContent(
             )
             is ClusterState.Loaded -> when (destination) {
                 TopLevelDestination.Overview -> OverviewScreen(session.profile, cluster)
-                TopLevelDestination.Infrastructure -> InfrastructureScreen(cluster)
+                TopLevelDestination.Infrastructure -> InfrastructureScreen(cluster, onOpenShell = onOpenShell)
                 // Shown by their own panes in AppShell.
                 TopLevelDestination.Guests, TopLevelDestination.Tasks -> Unit
             }
