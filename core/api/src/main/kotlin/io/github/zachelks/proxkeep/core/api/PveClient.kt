@@ -8,9 +8,11 @@ import io.github.zachelks.proxkeep.core.api.auth.TfaChallenge
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.json.PveJson
 import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
+import io.github.zachelks.proxkeep.core.api.model.AgentResult
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
+import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.GuestStatus
 import io.github.zachelks.proxkeep.core.api.model.Realm
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
@@ -130,6 +132,18 @@ class PveClient(
 
     suspend fun guestConfig(node: String, kind: ResourceKind, vmid: Int): GuestConfig =
         GuestConfig.fromJson(call(get(guestPath(node, kind, vmid) + "config"), JsonObject.serializer()))
+
+    /**
+     * Asks the QEMU guest agent inside a virtual machine which operating
+     * system it runs.
+     *
+     * @throws PveApiException when the agent is not installed or not running
+     */
+    suspend fun guestOsInfo(node: String, vmid: Int): GuestOsInfo {
+        val path = guestPath(node, ResourceKind.Qemu, vmid) + listOf("agent", "get-osinfo")
+        return call(get(path), AgentResult.serializer(GuestOsInfo.serializer())).result
+            ?: throw PveApiException(STATUS_OK, "The guest agent returned no data")
+    }
 
     /**
      * Starts a power action. The server queues it as a task and answers at

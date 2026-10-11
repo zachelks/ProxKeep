@@ -14,6 +14,8 @@ import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
+import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
+import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.core.api.model.GuestStatus
 import io.github.zachelks.proxkeep.core.api.model.TaskLogLine
 import io.github.zachelks.proxkeep.core.api.model.TaskStatus
@@ -59,12 +61,14 @@ sealed interface ClusterState {
  * Detail of the guest that is open on screen.
  *
  * @property resourceId the guest's ID in the cluster resource list, for example `qemu/100`
+ * @property osInfo what the guest agent reports, when one is running in the guest
  * @property error set when the latest attempt to read the detail failed
  */
 data class GuestDetail(
     val resourceId: String,
     val status: GuestStatus? = null,
     val config: GuestConfig? = null,
+    val osInfo: GuestOsInfo? = null,
     val error: UiMessage? = null,
 )
 
@@ -208,8 +212,23 @@ class MainViewModel(private val repository: ServerRepository) : ViewModel() {
         try {
             val status = active.client.guestStatus(node, resource.kind, vmid)
             val config = active.client.guestConfig(node, resource.kind, vmid)
+            // The operating system does not change while a guest runs, so one answer is kept.
+            val osInfo = open.osInfo ?: if (resource.kind == ResourceKind.Qemu && status.isRunning && config.agentEnabled) {
+                try {
+                    active.client.guestOsInfo(node, vmid)
+                } catch (e: IOException) {
+                    // No agent answering is normal; the row is simply left out.
+                    null
+                }
+            } else {
+                null
+            }
             _guestDetail.update { current ->
-                if (current?.resourceId == open.resourceId) GuestDetail(open.resourceId, status, config) else current
+                if (current?.resourceId == open.resourceId) {
+                    GuestDetail(open.resourceId, status, config, osInfo ?: current.osInfo)
+                } else {
+                    current
+                }
             }
         } catch (e: PveApiException) {
             if (e.isAuthenticationFailure) {

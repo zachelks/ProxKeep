@@ -318,4 +318,26 @@ class PveClientTest {
         assertFailsWith<PveApiException> { client.awaitTask("pve1", upid, pollIntervalMs = 1) }
         assertEquals(1, server.requestCount)
     }
+
+    @Test
+    fun guestAgentReportsTheOperatingSystem(): Unit = runBlocking {
+        enqueue(
+            """{"data":{"result":{"id":"mswindows","name":"Microsoft Windows",
+               "pretty-name":"Windows Server 2016 Standard","version":"Microsoft Windows Server 2016",
+               "version-id":"2016","kernel-release":"14393","machine":"x86_64"}}}""",
+        )
+        enqueue("""{"data":{"result":{"name":"Ubuntu","version":"24.04.1 LTS (Noble Numbat)"}}}""")
+        enqueue("""{"data":null}""", code = 500, reason = "QEMU guest agent is not running")
+
+        val windows = client.guestOsInfo("pve1", 100)
+        assertEquals("Windows Server 2016 Standard", windows.displayName)
+        assertEquals("14393", windows.kernelRelease)
+        assertEquals(listOf("nodes", "pve1", "qemu", "100", "agent", "get-osinfo"), segments(server.takeRequest()))
+
+        // Without a pretty name the name and version are joined.
+        assertEquals("Ubuntu 24.04.1 LTS (Noble Numbat)", client.guestOsInfo("pve1", 101).displayName)
+
+        val error = assertFailsWith<PveApiException> { client.guestOsInfo("pve1", 102) }
+        assertEquals("QEMU guest agent is not running", error.statusMessage)
+    }
 }
