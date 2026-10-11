@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ProxKeep</string>
+
+    <string name="destination_overview">Overview</string>
+    <string name="destination_guests">Guests</string>
+    <string name="destination_infrastructure">Infrastructure</string>
+    <string name="destination_tasks">Tasks</string>
+
+    <string name="empty_overview">Add a server to see cluster health here.</string>
+    <string name="empty_guests">Add a server to see its virtual machines and containers.</string>
+    <string name="empty_infrastructure">Add a server to see its nodes and storage.</string>
+    <string name="empty_tasks">Add a server to see running and recent tasks.</string>
+</resources>

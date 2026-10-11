@@ -1,0 +1,36 @@
+# ProxKeep
+
+A native Android client for administering Proxmox VE servers, built with
+Kotlin, Jetpack Compose and Material Design 3.
+
+This project is not affiliated with or endorsed by Proxmox Server Solutions
+GmbH. Proxmox is a registered trademark of Proxmox Server Solutions GmbH.
+
+## Status
+
+Early development. The app currently shows its navigation shell only.
+
+## Modules
+
+| Module | Purpose |
+| --- | --- |
+| `app` | The Android application: theme, navigation shell, screens |
+| `core:api` | Proxmox API models and JSON parsing. Plain Kotlin, no Android dependencies |
+
+## Building
+
+Requirements: JDK 17 or newer and the Android SDK (API 37 platform). Android
+Studio installs both.
+
+```sh
+./gradlew :app:assembleDebug     # build a debug APK
+./gradlew :core:api:test         # run the API module's unit tests
+./gradlew :app:lintDebug         # run Android lint
+```
+
+Every push runs these in GitHub Actions. The debug APK is attached to each
+workflow run as the `app-debug` artifact.
+
+## License
+
+GNU General Public License, version 3 or later. See [LICENSE](LICENSE).
