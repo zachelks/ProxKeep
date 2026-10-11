@@ -13,7 +13,6 @@
     <string name="empty_guests">Add a server to see its virtual machines and containers.</string>
     <string name="empty_infrastructure">Add a server to see its nodes and storage.</string>
     <string name="empty_tasks">Add a server to see running and recent tasks.</string>
-    <string name="tasks_not_yet">Tasks aren\'t available in this version yet.</string>
     <string name="signed_out_message">You\'re signed out of %1$s.</string>
 
     <!-- Actions -->
@@ -133,4 +132,126 @@
     <string name="status_available">Available</string>
     <string name="status_template">Template</string>
     <string name="status_unknown">Unknown</string>
+
+    <!-- Guest detail -->
+    <string name="guest_select_prompt">Select a guest to see its details.</string>
+    <string name="guest_gone">This guest is no longer on the server.</string>
+    <string name="guest_locked">Locked: %1$s</string>
+    <string name="network_totals">Received %1$s · Sent %2$s</string>
+    <string name="section_configuration">Configuration</string>
+    <string name="section_notes">Notes</string>
+    <string name="config_memory">Memory</string>
+    <string name="config_swap">Swap</string>
+    <string name="config_processors">Processors</string>
+    <string name="config_os_type">OS type</string>
+    <string name="config_start_at_boot">Start at boot</string>
+    <string name="config_guest_agent">QEMU guest agent</string>
+    <string name="config_unprivileged">Unprivileged container</string>
+    <string name="value_yes">Yes</string>
+    <string name="value_no">No</string>
+    <string name="device_hard_disk">Hard disk (%1$s)</string>
+    <string name="device_cdrom">CD/DVD drive (%1$s)</string>
+    <string name="device_efi_disk">EFI disk</string>
+    <string name="device_tpm_state">TPM state</string>
+    <string name="device_root_disk">Root disk</string>
+    <string name="device_mount_point">Mount point (%1$s)</string>
+    <string name="device_unused_disk">Unused disk (%1$s)</string>
+    <string name="device_network">Network device (%1$s)</string>
+
+    <!-- Power actions -->
+    <string name="action_more_actions">More</string>
+    <string name="action_start">Start</string>
+    <string name="action_shutdown">Shut down</string>
+    <string name="action_reboot">Reboot</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_reset">Reset</string>
+
+    <string name="progress_start">Starting…</string>
+    <string name="progress_shutdown">Shutting down…</string>
+    <string name="progress_reboot">Rebooting…</string>
+    <string name="progress_pause">Pausing…</string>
+    <string name="progress_resume">Resuming…</string>
+    <string name="progress_stop">Stopping…</string>
+    <string name="progress_reset">Resetting…</string>
+
+    <string name="done_start">%1$s started</string>
+    <string name="done_shutdown">%1$s shut down</string>
+    <string name="done_reboot">%1$s rebooted</string>
+    <string name="done_pause">%1$s paused</string>
+    <string name="done_resume">%1$s resumed</string>
+    <string name="done_stop">%1$s stopped</string>
+    <string name="done_reset">%1$s reset</string>
+
+    <string name="failed_start">Couldn\'t start %1$s</string>
+    <string name="failed_shutdown">Couldn\'t shut down %1$s</string>
+    <string name="failed_reboot">Couldn\'t reboot %1$s</string>
+    <string name="failed_pause">Couldn\'t pause %1$s</string>
+    <string name="failed_resume">Couldn\'t resume %1$s</string>
+    <string name="failed_stop">Couldn\'t stop %1$s</string>
+    <string name="failed_reset">Couldn\'t reset %1$s</string>
+
+    <string name="confirm_shutdown_title">Shut down %1$s?</string>
+    <string name="confirm_shutdown_body">The guest is asked to shut down cleanly. Anything it is serving becomes unavailable.</string>
+    <string name="confirm_reboot_title">Reboot %1$s?</string>
+    <string name="confirm_reboot_body">The guest is asked to shut down cleanly and then starts again.</string>
+    <string name="confirm_stop_title">Stop %1$s now?</string>
+    <string name="confirm_stop_body">The guest is switched off at once, like pulling the power cord. Unsaved data inside it may be lost.</string>
+    <string name="confirm_reset_title">Reset %1$s now?</string>
+    <string name="confirm_reset_body">The virtual machine restarts at once without shutting down. Unsaved data inside it may be lost.</string>
+
+    <!-- Tasks -->
+    <string name="no_tasks">No tasks have run recently.</string>
+    <string name="task_select_prompt">Select a task to see its log.</string>
+    <string name="task_gone">This task is no longer in the server\'s recent list.</string>
+    <string name="task_started">Started %1$s</string>
+    <string name="task_result">Result: %1$s</string>
+    <string name="task_status_running">Running</string>
+    <string name="task_status_ok">OK</string>
+    <string name="task_status_warnings">Warnings</string>
+    <string name="task_status_failed">Failed</string>
+
+    <string name="task_qmstart">Start VM %1$s</string>
+    <string name="task_qmstop">Stop VM %1$s</string>
+    <string name="task_qmshutdown">Shut down VM %1$s</string>
+    <string name="task_qmreboot">Reboot VM %1$s</string>
+    <string name="task_qmreset">Reset VM %1$s</string>
+    <string name="task_qmpause">Pause VM %1$s</string>
+    <string name="task_qmsuspend">Hibernate VM %1$s</string>
+    <string name="task_qmresume">Resume VM %1$s</string>
+    <string name="task_qmcreate">Create VM %1$s</string>
+    <string name="task_qmdestroy">Destroy VM %1$s</string>
+    <string name="task_qmclone">Clone VM %1$s</string>
+    <string name="task_qmigrate">Migrate VM %1$s</string>
+    <string name="task_qmrestore">Restore VM %1$s</string>
+    <string name="task_qmsnapshot">Snapshot VM %1$s</string>
+    <string name="task_qmrollback">Roll back VM %1$s</string>
+    <string name="task_qmdelsnapshot">Delete snapshot of VM %1$s</string>
+    <string name="task_vzstart">Start container %1$s</string>
+    <string name="task_vzstop">Stop container %1$s</string>
+    <string name="task_vzshutdown">Shut down container %1$s</string>
+    <string name="task_vzreboot">Reboot container %1$s</string>
+    <string name="task_vzsuspend">Suspend container %1$s</string>
+    <string name="task_vzresume">Resume container %1$s</string>
+    <string name="task_vzcreate">Create container %1$s</string>
+    <string name="task_vzdestroy">Destroy container %1$s</string>
+    <string name="task_vzclone">Clone container %1$s</string>
+    <string name="task_vzmigrate">Migrate container %1$s</string>
+    <string name="task_vzrestore">Restore container %1$s</string>
+    <string name="task_vzsnapshot">Snapshot container %1$s</string>
+    <string name="task_vzrollback">Roll back container %1$s</string>
+    <string name="task_vzdelsnapshot">Delete snapshot of container %1$s</string>
+    <string name="task_vzdump">Back up %1$s</string>
+    <string name="task_vzdump_job">Backup job</string>
+    <string name="task_vncproxy">Console for %1$s</string>
+    <string name="task_vncshell">Shell</string>
+    <string name="task_startall">Start all guests</string>
+    <string name="task_stopall">Stop all guests</string>
+    <string name="task_aptupdate">Update package database</string>
+    <string name="task_srvstart">Start service %1$s</string>
+    <string name="task_srvstop">Stop service %1$s</string>
+    <string name="task_srvrestart">Restart service %1$s</string>
+    <string name="task_srvreload">Reload service %1$s</string>
+    <string name="task_download">Download %1$s</string>
 </resources>
