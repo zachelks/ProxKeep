@@ -10,7 +10,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.zachelks.proxkeep.ProxKeepApplication
 import io.github.zachelks.proxkeep.core.api.PveApiException
+import io.github.zachelks.proxkeep.console.ConsoleManager
+import io.github.zachelks.proxkeep.console.ConsoleSession
 import io.github.zachelks.proxkeep.core.api.awaitTask
+import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
@@ -99,7 +102,10 @@ data class TaskProgress(
     val newLines: List<TaskLogLine>,
 )
 
-class MainViewModel(private val repository: ServerRepository) : ViewModel() {
+class MainViewModel(
+    private val repository: ServerRepository,
+    private val consoles: ConsoleManager,
+) : ViewModel() {
 
     val session: StateFlow<Session> = repository.session
     val servers: StateFlow<StoredServers> = repository.servers
@@ -340,6 +346,29 @@ class MainViewModel(private val repository: ServerRepository) : ViewModel() {
         }
     }
 
+    // --- Consoles --------------------------------------------------------
+
+    /** The console that is open, or null. It outlives this view model's screens. */
+    val console: StateFlow<ConsoleSession?> = consoles.current
+
+    fun openNodeShell(node: String) {
+        consoles.open(ConsoleTarget.NodeShell(node), title = node)
+    }
+
+    fun openGuestConsole(resource: ClusterResource) {
+        val node = resource.node ?: return
+        val vmid = resource.vmid ?: return
+        consoles.open(ConsoleTarget.Guest(node, resource.kind, vmid), title = resource.name ?: vmid.toString())
+    }
+
+    fun reconnectConsole() {
+        consoles.reconnect()
+    }
+
+    fun closeConsole() {
+        consoles.close()
+    }
+
     // --- Servers ---------------------------------------------------------
 
     fun startAddServer() {
@@ -387,7 +416,7 @@ class MainViewModel(private val repository: ServerRepository) : ViewModel() {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val application = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as ProxKeepApplication
-                MainViewModel(application.container.repository)
+                MainViewModel(application.container.repository, application.container.consoles)
             }
         }
     }

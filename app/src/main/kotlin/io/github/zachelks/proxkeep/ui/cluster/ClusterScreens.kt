@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -169,7 +170,11 @@ private fun usedOfTotal(used: Long?, total: Long?): String =
 // --- Infrastructure ----------------------------------------------------------
 
 @Composable
-fun InfrastructureScreen(state: ClusterState.Loaded, modifier: Modifier = Modifier) {
+fun InfrastructureScreen(
+    state: ClusterState.Loaded,
+    onOpenShell: (node: String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val nodes = state.resources.filter { it.kind == ResourceKind.Node }.sortedBy { it.node }
     val storages = state.resources
         .filter { it.kind == ResourceKind.Storage }
@@ -197,6 +202,15 @@ fun InfrastructureScreen(state: ClusterState.Loaded, modifier: Modifier = Modifi
                     },
                     trailingContent = { StatusLabel(text = status.text, tone = status.tone) },
                 )
+                val name = node.node
+                if (name != null && node.status == "online") {
+                    TextButton(
+                        onClick = { onOpenShell(name) },
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                    ) {
+                        Text(stringResource(R.string.action_open_shell))
+                    }
+                }
             }
         }
 

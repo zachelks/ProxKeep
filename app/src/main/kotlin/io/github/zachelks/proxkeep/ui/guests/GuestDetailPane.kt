@@ -79,6 +79,7 @@ fun GuestDetailPane(
     showBack: Boolean,
     onBack: () -> Unit,
     onAction: (GuestAction) -> Unit,
+    onOpenConsole: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -97,6 +98,16 @@ fun GuestDetailPane(
                             Icon(
                                 painter = painterResource(R.drawable.ic_arrow_back),
                                 contentDescription = stringResource(R.string.action_back),
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    if (resource != null && hasTextConsole(resource, detail?.config)) {
+                        IconButton(onClick = onOpenConsole) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_terminal),
+                                contentDescription = stringResource(R.string.action_open_console),
                             )
                         }
                     }
@@ -159,6 +170,20 @@ fun GuestDetailPane(
                 }
             }
         }
+    }
+}
+
+/**
+ * Whether a text console can be opened on the guest right now. A container
+ * always has one. A virtual machine has one only if it was given a serial
+ * port.
+ */
+private fun hasTextConsole(resource: ClusterResource, config: GuestConfig?): Boolean {
+    if (resource.status != "running" || resource.isTemplate) return false
+    return when (resource.kind) {
+        ResourceKind.Lxc -> true
+        ResourceKind.Qemu -> config?.devices("serial")?.isNotEmpty() == true
+        else -> false
     }
 }
 

@@ -24,3 +24,5 @@ rootProject.name = "ProxKeep"
 
 include(":app")
 include(":core:api")
+include(":terminal:emulator")
+include(":terminal:view")

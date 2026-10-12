@@ -6,6 +6,7 @@ import android.os.SystemClock
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.data.AppSettings
 import io.github.zachelks.proxkeep.data.ProfileStore
 import io.github.zachelks.proxkeep.data.SecretBox
@@ -56,6 +57,8 @@ class AppContainer(context: Context) {
         http = http,
         scope = scope,
     )
+
+    val consoles = ConsoleManager(context.applicationContext, repository, scope)
 
     val settings = AppSettings(context)
 
