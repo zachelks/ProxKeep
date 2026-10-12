@@ -18,29 +18,68 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
+import io.github.zachelks.proxkeep.core.api.model.Permissions
+import io.github.zachelks.proxkeep.core.api.model.Privilege
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.VersionInfo
+import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.ServerProfile
-import io.github.zachelks.proxkeep.ui.ClusterState
+import io.github.zachelks.proxkeep.ui.appContainer
+import io.github.zachelks.proxkeep.ui.components.CenteredProgress
+import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
 import io.github.zachelks.proxkeep.ui.components.UsageBar
 import io.github.zachelks.proxkeep.ui.format.formatBytes
 import io.github.zachelks.proxkeep.ui.format.formatUptime
 import io.github.zachelks.proxkeep.ui.format.usageFraction
 import io.github.zachelks.proxkeep.ui.text
+import io.github.zachelks.proxkeep.ui.toUiMessage
 
 private val ScreenPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+
+@Composable
+private fun clusterViewModel(): ClusterViewModel {
+    val container = appContainer()
+    return viewModel { ClusterViewModel(container.cluster, container.access, container.consoles, container.refresh) }
+}
+
+/**
+ * Shows [content] once the cluster has loaded, and the shared loading and
+ * failure states until then.
+ */
+@Composable
+fun ClusterContent(
+    state: ClusterState,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable (ClusterState.Loaded) -> Unit,
+) {
+    when (state) {
+        ClusterState.Loading -> CenteredProgress(modifier)
+        is ClusterState.Failed -> MessageWithAction(
+            message = state.error.toUiMessage().text(),
+            modifier = modifier,
+            actionLabel = stringResource(R.string.action_retry),
+            onAction = onRetry,
+        )
+        is ClusterState.Loaded -> content(state)
+    }
+}
 
 /** Shown above a list when its data could not be refreshed. */
 @Composable
 fun StaleBanner(state: ClusterState.Loaded) {
-    val error = state.refreshError ?: return
+    val error = state.refreshError?.toUiMessage() ?: return
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -68,7 +107,22 @@ private fun SectionTitle(text: String) {
 // --- Overview ----------------------------------------------------------------
 
 @Composable
-fun OverviewScreen(profile: ServerProfile, state: ClusterState.Loaded, modifier: Modifier = Modifier) {
+fun OverviewRoute(profile: ServerProfile) {
+    val viewModel = clusterViewModel()
+    val cluster by viewModel.cluster.collectAsStateWithLifecycle()
+    val access by viewModel.access.collectAsStateWithLifecycle()
+    ClusterContent(state = cluster, onRetry = viewModel::retry) { loaded ->
+        OverviewScreen(profile = profile, state = loaded, version = access?.version)
+    }
+}
+
+@Composable
+fun OverviewScreen(
+    profile: ServerProfile,
+    state: ClusterState.Loaded,
+    version: VersionInfo?,
+    modifier: Modifier = Modifier,
+) {
     val nodes = state.resources.filter { it.kind == ResourceKind.Node }.sortedBy { it.node }
     val guests = state.resources.filter { it.isGuest && !it.isTemplate }
     val running = guests.count { it.status == "running" }
@@ -92,7 +146,7 @@ fun OverviewScreen(profile: ServerProfile, state: ClusterState.Loaded, modifier:
                     Text(
                         text = listOfNotNull(
                             profile.address.display,
-                            state.version?.let { stringResource(R.string.version_label, it.version) },
+                            version?.let { stringResource(R.string.version_label, it.version) },
                         ).joinToString(" · "),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -169,9 +223,30 @@ private fun usedOfTotal(used: Long?, total: Long?): String =
 
 // --- Infrastructure ----------------------------------------------------------
 
+/** @param onConsoleOpened called after a node shell has been opened, to show it */
+@Composable
+fun InfrastructureRoute(onConsoleOpened: () -> Unit) {
+    val viewModel = clusterViewModel()
+    val cluster by viewModel.cluster.collectAsStateWithLifecycle()
+    val access by viewModel.access.collectAsStateWithLifecycle()
+    ClusterContent(state = cluster, onRetry = viewModel::retry) { loaded ->
+        InfrastructureScreen(
+            state = loaded,
+            canOpenShell = { node ->
+                access?.allows(listOf(Permissions.nodePath(node)), Privilege.SYS_CONSOLE) ?: true
+            },
+            onOpenShell = { node ->
+                viewModel.openNodeShell(node)
+                onConsoleOpened()
+            },
+        )
+    }
+}
+
 @Composable
 fun InfrastructureScreen(
     state: ClusterState.Loaded,
+    canOpenShell: (node: String) -> Boolean,
     onOpenShell: (node: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -203,7 +278,7 @@ fun InfrastructureScreen(
                     trailingContent = { StatusLabel(text = status.text, tone = status.tone) },
                 )
                 val name = node.node
-                if (name != null && node.status == "online") {
+                if (name != null && node.status == "online" && canOpenShell(name)) {
                     TextButton(
                         onClick = { onOpenShell(name) },
                         modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),

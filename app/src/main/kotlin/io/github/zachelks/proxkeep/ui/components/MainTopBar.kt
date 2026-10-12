@@ -26,14 +26,19 @@ import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.data.ServerProfile
 import io.github.zachelks.proxkeep.data.Session
 import io.github.zachelks.proxkeep.data.StoredServers
-import io.github.zachelks.proxkeep.ui.MainViewModel
+import io.github.zachelks.proxkeep.ui.ShellViewModel
 
 /**
  * The app bar of every top-level screen: a title, a refresh button while
  * signed in, and the server menu.
  */
 @Composable
-fun MainTopBar(title: String, viewModel: MainViewModel) {
+fun MainTopBar(
+    title: String,
+    viewModel: ShellViewModel,
+    onAddServer: () -> Unit,
+    onSettings: () -> Unit,
+) {
     val session by viewModel.session.collectAsStateWithLifecycle()
     val servers by viewModel.servers.collectAsStateWithLifecycle()
 
@@ -41,7 +46,7 @@ fun MainTopBar(title: String, viewModel: MainViewModel) {
         title = { Text(title) },
         actions = {
             if (session is Session.Active) {
-                IconButton(onClick = viewModel::refreshNow) {
+                IconButton(onClick = viewModel::refresh) {
                     Icon(
                         painter = painterResource(R.drawable.ic_refresh),
                         contentDescription = stringResource(R.string.action_refresh),
@@ -51,11 +56,11 @@ fun MainTopBar(title: String, viewModel: MainViewModel) {
             ServerMenu(
                 session = session,
                 servers = servers,
-                onAddServer = viewModel::startAddServer,
+                onAddServer = onAddServer,
                 onSwitch = viewModel::activate,
                 onSignOut = viewModel::signOut,
                 onRemove = viewModel::remove,
-                onSettings = viewModel::openSettings,
+                onSettings = onSettings,
             )
         },
     )

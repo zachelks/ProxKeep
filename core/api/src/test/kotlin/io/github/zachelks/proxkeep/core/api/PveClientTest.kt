@@ -340,4 +340,18 @@ class PveClientTest {
         val error = assertFailsWith<PveApiException> { client.guestOsInfo("pve1", 102) }
         assertEquals("QEMU guest agent is not running", error.statusMessage)
     }
+
+    @Test
+    fun permissionsAreReadForTheWholeTreeOrOnePath(): Unit = runBlocking {
+        enqueue("""{"data":{"/":{"Sys.Audit":1},"/vms/100":{"VM.PowerMgmt":0}}}""")
+        enqueue("""{"data":{"/vms/100":{"VM.Console":1}}}""")
+
+        val all = client.permissions()
+        assertTrue(all.has("/vms/100", "VM.PowerMgmt"))
+        assertFalse(all.has("/vms/100", "Sys.Audit"))
+        assertEquals("/api2/json/access/permissions", server.takeRequest().path)
+
+        assertTrue(client.permissions("/vms/100").has("/vms/100", "VM.Console"))
+        assertEquals("/api2/json/access/permissions?path=%2Fvms%2F100", server.takeRequest().path)
+    }
 }

@@ -35,14 +35,9 @@ import androidx.compose.material3.adaptive.layout.PaneAdaptedValue
 import androidx.compose.material3.adaptive.navigation.NavigableListDetailPaneScaffold
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -50,44 +45,36 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.zachelks.proxkeep.R
-import io.github.zachelks.proxkeep.core.api.PveApiException
 import io.github.zachelks.proxkeep.core.api.model.TaskStatus
 import io.github.zachelks.proxkeep.core.api.model.TaskSummary
-import io.github.zachelks.proxkeep.ui.MainViewModel
-import io.github.zachelks.proxkeep.ui.TasksState
+import io.github.zachelks.proxkeep.ui.TopBar
 import io.github.zachelks.proxkeep.ui.UiMessage
+import io.github.zachelks.proxkeep.ui.appContainer
 import io.github.zachelks.proxkeep.ui.components.CenteredProgress
-import io.github.zachelks.proxkeep.ui.components.MainTopBar
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
 import io.github.zachelks.proxkeep.ui.text
-import io.github.zachelks.proxkeep.ui.toUiMessage
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.IOException
-
-private const val LOG_POLL_MS = 1_500L
-
-/** The server's stand-in for a log with nothing in it yet. */
-private const val EMPTY_LOG_PLACEHOLDER = "no content"
 
 /**
  * The Tasks destination: recent and running tasks, and the log of the
  * selected one.
  */
 @Composable
-fun TasksPane(viewModel: MainViewModel) {
+fun TasksPane(topBar: TopBar) {
+    val container = appContainer()
+    val viewModel = viewModel { TasksViewModel(container.repository, container.refresh) }
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     val scope = rememberCoroutineScope()
     val state by viewModel.tasks.collectAsStateWithLifecycle()
-
-    DisposableEffect(Unit) {
-        viewModel.setTasksVisible(true)
-        onDispose { viewModel.setTasksVisible(false) }
-    }
+    val log by viewModel.log.collectAsStateWithLifecycle()
 
     val selectedUpid = navigator.currentDestination?.contentKey
+    val selectedTask = (state as? TasksState.Loaded)?.tasks?.firstOrNull { it.upid == selectedUpid }
+    LaunchedEffect(selectedTask) { viewModel.select(selectedTask) }
+
     val listIsHidden = navigator.scaffoldValue[ListDetailPaneScaffoldRole.List] == PaneAdaptedValue.Hidden
 
     NavigableListDetailPaneScaffold(
@@ -95,9 +82,10 @@ fun TasksPane(viewModel: MainViewModel) {
         listPane = {
             AnimatedPane {
                 TaskList(
-                    viewModel = viewModel,
+                    topBar = topBar,
                     state = state,
                     selectedUpid = selectedUpid,
+                    onRetry = viewModel::retry,
                     onSelect = { upid ->
                         scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, upid) }
                     },
@@ -106,13 +94,12 @@ fun TasksPane(viewModel: MainViewModel) {
         },
         detailPane = {
             AnimatedPane {
-                val task = (state as? TasksState.Loaded)?.tasks?.firstOrNull { it.upid == selectedUpid }
                 when {
                     selectedUpid == null -> MessageWithAction(message = stringResource(R.string.task_select_prompt))
-                    task == null -> MessageWithAction(message = stringResource(R.string.task_gone))
+                    selectedTask == null -> MessageWithAction(message = stringResource(R.string.task_gone))
                     else -> TaskDetailPane(
-                        viewModel = viewModel,
-                        task = task,
+                        task = selectedTask,
+                        log = log?.takeIf { it.upid == selectedTask.upid },
                         showBack = listIsHidden,
                         onBack = { scope.launch { navigator.navigateBack() } },
                     )
@@ -124,13 +111,14 @@ fun TasksPane(viewModel: MainViewModel) {
 
 @Composable
 private fun TaskList(
-    viewModel: MainViewModel,
+    topBar: TopBar,
     state: TasksState,
     selectedUpid: String?,
+    onRetry: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
     Scaffold(
-        topBar = { MainTopBar(title = stringResource(R.string.destination_tasks), viewModel = viewModel) },
+        topBar = { topBar(stringResource(R.string.destination_tasks)) },
     ) { innerPadding ->
         val modifier = Modifier.fillMaxSize().padding(innerPadding)
         when (state) {
@@ -139,7 +127,7 @@ private fun TaskList(
                 message = state.message.text(),
                 modifier = modifier,
                 actionLabel = stringResource(R.string.action_retry),
-                onAction = viewModel::refreshNow,
+                onAction = onRetry,
             )
             is TasksState.Loaded -> if (state.tasks.isEmpty()) {
                 MessageWithAction(message = stringResource(R.string.no_tasks), modifier = modifier)
@@ -198,41 +186,14 @@ private fun TaskRow(task: TaskSummary, selected: Boolean, onClick: () -> Unit) {
 /** One task's outcome and log. The log follows the task while it runs. */
 @Composable
 private fun TaskDetailPane(
-    viewModel: MainViewModel,
     task: TaskSummary,
+    log: TaskLog?,
     showBack: Boolean,
     onBack: () -> Unit,
 ) {
-    val lines = remember(task.upid) { mutableStateListOf<String>() }
-    var status by remember(task.upid) { mutableStateOf<TaskStatus?>(null) }
-    var error by remember(task.upid) { mutableStateOf<UiMessage?>(null) }
+    val lines = log?.lines.orEmpty()
+    val status = log?.status
     val listState = rememberLazyListState()
-
-    LaunchedEffect(task.upid) {
-        while (true) {
-            var drained = false
-            try {
-                val progress = viewModel.readTask(task.node, task.upid, lines.size)
-                status = progress.status
-                error = null
-                val fresh = progress.newLines.map { it.t }
-                val isPlaceholder = lines.isEmpty() && fresh.size == 1 && fresh.first() == EMPTY_LOG_PLACEHOLDER
-                if (!isPlaceholder) lines.addAll(fresh)
-                val pageWasFull = progress.newLines.size >= MainViewModel.LOG_PAGE_SIZE
-                // More of a long log is waiting: fetch it without a pause.
-                if (pageWasFull) continue
-                drained = !progress.status.isRunning
-            } catch (e: PveApiException) {
-                // The server refused; asking again will not help.
-                error = e.toUiMessage()
-                drained = true
-            } catch (e: IOException) {
-                error = e.toUiMessage()
-            }
-            if (drained) break
-            delay(LOG_POLL_MS)
-        }
-    }
 
     // Keep the newest line in view while the task is still producing output.
     LaunchedEffect(lines.size) {
@@ -262,7 +223,7 @@ private fun TaskDetailPane(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                item(key = "summary") { TaskSummaryBlock(task = task, status = status, error = error) }
+                item(key = "summary") { TaskSummaryBlock(task = task, status = status, error = log?.error) }
                 itemsIndexed(lines) { _, line ->
                     Text(
                         text = line,

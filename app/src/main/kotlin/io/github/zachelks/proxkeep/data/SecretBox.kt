@@ -15,19 +15,18 @@ import javax.crypto.spec.GCMParameterSpec
  * Android Keystore and cannot be read back out of it, so stored secrets are
  * useless without this device.
  */
-class SecretBox(private val keyAlias: String = "proxkeep.secrets.v1") {
+class SecretBox(private val keyAlias: String = "proxkeep.secrets.v1") : SecretCipher {
 
     /** Returns Base64 text holding the nonce followed by the ciphertext. */
     @Throws(GeneralSecurityException::class)
-    fun encrypt(plainText: String): String {
+    override fun encrypt(plainText: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val cipherText = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
         return Base64.encodeToString(cipher.iv + cipherText, Base64.NO_WRAP)
     }
 
-    /** Returns the secret, or null if [encoded] cannot be decrypted on this device. */
-    fun decrypt(encoded: String): String? = try {
+    override fun decrypt(encoded: String): String? = try {
         val bytes = Base64.decode(encoded, Base64.NO_WRAP)
         if (bytes.size <= NONCE_BYTES) {
             null

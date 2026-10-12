@@ -9,14 +9,13 @@ import java.io.File
 import java.io.IOException
 
 /** Reads and writes the saved servers as one JSON file in app-private storage. */
-class ProfileStore(private val file: File) {
+class ProfileStore(private val file: File) : ProfileStorage {
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    /** Returns what is saved, or an empty state if nothing readable is there. */
-    suspend fun read(): StoredServers = withContext(Dispatchers.IO) {
+    override suspend fun read(): StoredServers = withContext(Dispatchers.IO) {
         if (!file.exists()) return@withContext StoredServers()
         try {
             val text = AtomicFile(file).readFully().toString(Charsets.UTF_8)
@@ -30,7 +29,7 @@ class ProfileStore(private val file: File) {
 
     /** Replaces the file in one step, so a crash cannot leave it half written. */
     @Throws(IOException::class)
-    suspend fun write(state: StoredServers): Unit = withContext(Dispatchers.IO) {
+    override suspend fun write(state: StoredServers): Unit = withContext(Dispatchers.IO) {
         val atomicFile = AtomicFile(file)
         val stream = atomicFile.startWrite()
         try {

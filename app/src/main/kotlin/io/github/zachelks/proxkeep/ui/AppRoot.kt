@@ -24,6 +24,6 @@ fun AppRoot() {
     if (locked) {
         LockScreen(appLock = container.appLock, authenticator = container.authenticator)
     } else {
-        AppShell()
+        AppNavigation()
     }
 }

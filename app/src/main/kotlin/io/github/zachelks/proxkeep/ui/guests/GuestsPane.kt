@@ -23,7 +23,6 @@ import androidx.compose.material3.adaptive.layout.PaneAdaptedValue
 import androidx.compose.material3.adaptive.navigation.NavigableListDetailPaneScaffold
 import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -32,15 +31,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
+import io.github.zachelks.proxkeep.core.api.model.Permissions
+import io.github.zachelks.proxkeep.core.api.model.Privilege
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
-import io.github.zachelks.proxkeep.ui.ClusterState
-import io.github.zachelks.proxkeep.ui.MainViewModel
+import io.github.zachelks.proxkeep.data.ClusterState
+import io.github.zachelks.proxkeep.data.ServerAccess
+import io.github.zachelks.proxkeep.ui.TopBar
+import io.github.zachelks.proxkeep.ui.appContainer
+import io.github.zachelks.proxkeep.ui.cluster.ClusterContent
 import io.github.zachelks.proxkeep.ui.cluster.StaleBanner
 import io.github.zachelks.proxkeep.ui.cluster.statusText
-import io.github.zachelks.proxkeep.ui.components.MainTopBar
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
 import kotlinx.coroutines.launch
@@ -48,19 +52,39 @@ import kotlinx.coroutines.launch
 /**
  * The Guests destination: a list of guests and the detail of the selected
  * one. Phones show one at a time; wider windows show them side by side.
+ *
+ * @param onConsoleOpened called after a guest's console has been opened, to show it
  */
 @Composable
-fun GuestsPane(viewModel: MainViewModel, cluster: ClusterState.Loaded) {
+fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
+    val container = appContainer()
+    val viewModel = viewModel {
+        GuestsViewModel(
+            container.repository,
+            container.cluster,
+            container.access,
+            container.guestActions,
+            container.consoles,
+            container.refresh,
+        )
+    }
+    val cluster by viewModel.cluster.collectAsStateWithLifecycle()
+    val loaded = cluster as? ClusterState.Loaded
+    if (loaded == null) {
+        Scaffold(topBar = { topBar(stringResource(R.string.destination_guests)) }) { innerPadding ->
+            ClusterContent(state = cluster, onRetry = viewModel::retry, modifier = Modifier.padding(innerPadding)) {}
+        }
+        return
+    }
+
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     val scope = rememberCoroutineScope()
-    val detail by viewModel.guestDetail.collectAsStateWithLifecycle()
+    val detail by viewModel.detail.collectAsStateWithLifecycle()
     val busyGuests by viewModel.busyGuests.collectAsStateWithLifecycle()
+    val access by viewModel.access.collectAsStateWithLifecycle()
 
     val selectedId = navigator.currentDestination?.contentKey
-    LaunchedEffect(selectedId) { viewModel.openGuest(selectedId) }
-    DisposableEffect(Unit) {
-        onDispose { viewModel.openGuest(null) }
-    }
+    LaunchedEffect(selectedId) { viewModel.select(selectedId) }
 
     val listIsHidden = navigator.scaffoldValue[ListDetailPaneScaffoldRole.List] == PaneAdaptedValue.Hidden
 
@@ -69,8 +93,8 @@ fun GuestsPane(viewModel: MainViewModel, cluster: ClusterState.Loaded) {
         listPane = {
             AnimatedPane {
                 GuestList(
-                    viewModel = viewModel,
-                    cluster = cluster,
+                    topBar = topBar,
+                    cluster = loaded,
                     selectedId = selectedId,
                     busyGuests = busyGuests,
                     onSelect = { id ->
@@ -84,17 +108,24 @@ fun GuestsPane(viewModel: MainViewModel, cluster: ClusterState.Loaded) {
                 if (selectedId == null) {
                     MessageWithAction(message = stringResource(R.string.guest_select_prompt))
                 } else {
-                    val resource = cluster.resources.firstOrNull { it.id == selectedId }
+                    val resource = loaded.resources.firstOrNull { it.id == selectedId }
                     // Keyed by guest so an open menu or confirmation never carries over to another guest.
                     key(selectedId) {
                         GuestDetailPane(
                             resource = resource,
                             detail = detail?.takeIf { it.resourceId == selectedId },
                             busyAction = busyGuests[selectedId],
+                            canPowerManage = resource != null && access.allowsOn(resource, Privilege.VM_POWER_MGMT),
+                            canOpenConsole = resource != null && access.allowsOn(resource, Privilege.VM_CONSOLE),
                             showBack = listIsHidden,
                             onBack = { scope.launch { navigator.navigateBack() } },
-                            onAction = { action -> resource?.let { viewModel.runGuestAction(it, action) } },
-                            onOpenConsole = { resource?.let { viewModel.openGuestConsole(it) } },
+                            onAction = { action -> resource?.let { viewModel.runAction(it, action) } },
+                            onOpenConsole = {
+                                resource?.let {
+                                    viewModel.openConsole(it)
+                                    onConsoleOpened()
+                                }
+                            },
                         )
                     }
                 }
@@ -103,9 +134,15 @@ fun GuestsPane(viewModel: MainViewModel, cluster: ClusterState.Loaded) {
     )
 }
 
+/** Whether to offer something that needs [privilege] on [guest]. */
+private fun ServerAccess?.allowsOn(guest: ClusterResource, privilege: String): Boolean {
+    val vmid = guest.vmid ?: return true
+    return this?.allows(Permissions.guestPaths(vmid, guest.pool), privilege) ?: true
+}
+
 @Composable
 private fun GuestList(
-    viewModel: MainViewModel,
+    topBar: TopBar,
     cluster: ClusterState.Loaded,
     selectedId: String?,
     busyGuests: Map<String, GuestAction>,
@@ -114,7 +151,7 @@ private fun GuestList(
     val guests = cluster.resources.filter { it.isGuest }.sortedBy { it.vmid ?: Int.MAX_VALUE }
 
     Scaffold(
-        topBar = { MainTopBar(title = stringResource(R.string.destination_guests), viewModel = viewModel) },
+        topBar = { topBar(stringResource(R.string.destination_guests)) },
     ) { innerPadding ->
         if (guests.isEmpty()) {
             MessageWithAction(

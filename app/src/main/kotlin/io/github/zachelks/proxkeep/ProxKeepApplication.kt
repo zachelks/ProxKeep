@@ -8,8 +8,12 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.data.AppSettings
+import io.github.zachelks.proxkeep.data.ClusterRepository
+import io.github.zachelks.proxkeep.data.GuestActions
 import io.github.zachelks.proxkeep.data.ProfileStore
+import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SecretBox
+import io.github.zachelks.proxkeep.data.ServerAccessRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.security.AppLock
 import io.github.zachelks.proxkeep.security.Authenticator
@@ -57,6 +61,14 @@ class AppContainer(context: Context) {
         http = http,
         scope = scope,
     )
+
+    val refresh = RefreshSignal()
+
+    val cluster = ClusterRepository(repository, refresh, scope)
+
+    val access = ServerAccessRepository(repository, scope)
+
+    val guestActions = GuestActions(repository, refresh, scope)
 
     val consoles = ConsoleManager(context.applicationContext, repository, scope)
 
