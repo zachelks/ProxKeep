@@ -22,7 +22,7 @@ Requires JDK 17+ and the Android SDK (API 37 platform). CI uses JDK 21.
 
 CI (`.github/workflows/ci.yml`) runs all of the above on every push. `.github/scripts/report_results.py` repeats test failures, compiler errors and lint findings as GitHub annotations, which can be read through the GitHub API when raw logs can't. The debug APK is uploaded as the `app-debug` artifact.
 
-Cloud sessions have no Android SDK, so CI is the only build check there. Nothing has an instrumented test or emulator setup. Behavior on a device and against a real server is checked by hand, which is why every pull request ends with a "How to test" list.
+Cloud sessions have no Android SDK, so CI is the only check for the app module there. `core:api` and the app's Android-free `data` classes can still be compiled and tested with a standalone JVM Gradle build. Nothing has an instrumented test or emulator setup. Behavior on a device and against a real server is checked by hand, which is why every pull request ends with a "How to test" list.
 
 ## Modules
 
@@ -32,21 +32,29 @@ Cloud sessions have no Android SDK, so CI is the only build check there. Nothing
 
 ## Architecture
 
-**Dependency wiring.** There is no DI framework. `ProxKeepApplication.AppContainer` builds the process-lifetime objects: `ServerRepository`, `ConsoleManager`, `AppSettings`, `AppLock`, `Authenticator`, and one shared `OkHttpClient`. Composables reach them with `appContainer()`, and `MainViewModel.Factory` pulls them from the container.
+**Dependency wiring.** There is no DI framework. `ProxKeepApplication.AppContainer` builds the process-lifetime objects: `ServerRepository`, `ClusterRepository`, `ServerAccessRepository`, `GuestActions`, `RefreshSignal`, `ConsoleManager`, `AppSettings`, `AppLock`, `Authenticator`, and one shared `OkHttpClient`. Screens get them with `appContainer()` and create their view models with `viewModel { SomeViewModel(container.…) }`.
 
 **Sessions and credentials.** `ServerRepository` owns the saved profiles (`servers.json` in `filesDir`) and the current `Session` (`None` / `SignedOut` / `Active(profile, client)`).
-- `PveClient` is immutable. `withCredentials` returns a new client, and ticket renewal (every 30 minutes) swaps the client inside `Session.Active`. Always read the client from the current session; never cache it.
+- Every request for the signed-in server goes through `ServerRepository.request { client -> … }`. It is the one place that handles rejected credentials (it signs the session out), and it throws `NotSignedInException` when nothing is signed in. Don't read `Session.Active.client` directly for requests.
+- `activeProfileId` changes only when the server or sign-in changes, not on ticket renewal. Loaders `flatMapLatest` on it, so a server switch cancels in-flight loads and data from one server is never shown under another.
+- `PveClient` is immutable. `withCredentials` returns a new client, and ticket renewal (every 30 minutes) swaps the client inside `Session.Active`.
 - Login tickets live only in memory. API token secrets are encrypted by `SecretBox` with an Android Keystore AES-GCM key.
-- When the server rejects credentials (`PveApiException.isAuthenticationFailure`), call `repository.sessionExpired(profileId)`.
+- `ServerRepository` depends on the `ProfileStorage` and `SecretCipher` interfaces (`data/Storage.kt`), so it and the loaders are unit-tested on the JVM against a `MockWebServer` with a pinned certificate (`app/src/test/.../data/TestServers.kt`).
 
 **TLS.** `ServerTrust` accepts a certificate only if the platform trusts it or its SHA-256 fingerprint matches the profile's pin. Each server gets a copy of the shared OkHttp client carrying its own trust settings. `probeServer` makes first contact and reports an untrusted certificate rather than sending anything. Never add a trust-all path.
 
-**UI state.** Navigation uses no library.
-- `AppShell` holds the top-level destination (an enum, `TopLevelDestination`) and shows overlays: the add-server flow, Settings, the terminal.
-- One `MainViewModel` serves all screens. It holds cluster state, guest detail, tasks and action events.
-- Live data is polled every 10 s while the app is visible. A single `/cluster/resources` call feeds the lists.
-- Power actions return a task UPID, and `awaitTask` follows it to completion.
-- Guests and Tasks use Material 3 adaptive list-detail panes.
+**Data loading.** Live data loads only while a screen collects it: loaders are `StateFlow`s built with `stateIn(…, WhileSubscribed(5 s))`, and screens collect with `collectAsStateWithLifecycle`, so nothing loads in the background or behind the app lock.
+- `RefreshSignal.ticks()` paces every loader: at once, every 10 s, and whenever `request()` is called (the refresh button, a finished power action).
+- `ClusterRepository` holds the one `/cluster/resources` call that feeds Overview, Guests and Infrastructure.
+- `ServerAccessRepository` holds the server version and the credentials' permissions (`/access/permissions`). Use `ServerAccess.allows(paths, privilege)` to decide whether to offer an action; it allows everything while permissions are unknown, because the server enforces them anyway. `Permissions.guestPaths` includes the guest's pool.
+- `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`.
+
+**Navigation.** Navigation 3 (`ui/AppNavigation.kt`). The back stack is a list of `Route`s, saved across rotation and process death, and changed only through `Navigator`.
+- `Route.Main` is always at the bottom. `MainScreen` holds the four top-level destinations (`TopLevelDestination`) as tabs in a `NavigationSuiteScaffold`. Back from another tab returns to Overview.
+- Settings, sign-in and the terminal are routes pushed over `Main`. Each route gets its own `ViewModelStore`, cleared when the route is closed.
+- Routes hold IDs, never data, because they are serialized with the back stack.
+
+**View models.** One per feature: `ShellViewModel` (server menu, refresh, action messages), `ClusterViewModel` (Overview, Infrastructure), `GuestsViewModel` (list, detail, actions), `TasksViewModel` (list, log follower), `AddServerViewModel` (sign-in flow). Polling and other data logic belong in the view model or a repository, not in composables. Guests and Tasks use Material 3 adaptive list-detail panes; the pane tells the view model what is selected.
 
 **App lock.** `AppLock` holds the timing rules and has no Android dependencies, so it is unit-tested. `ProcessLifecycleOwner` drives it from `ProxKeepApplication`. While the app is locked, `AppRoot` composes only `LockScreen`, so nothing behind the lock fetches or shows data. `MainActivity` is a `FragmentActivity` because `BiometricPrompt` requires one.
 
@@ -70,13 +78,12 @@ Cloud sessions have no Android SDK, so CI is the only build check there. Nothing
 
 ## Milestone progress
 
-**Milestone 1, Foundation.** Mostly done. Server profiles, password and TOTP sign-in, API tokens, TLS pinning, app lock, Overview, the guest list and detail, power actions and task tracking all work.
+**Milestone 1, Foundation.** Mostly done. Server profiles, password and TOTP sign-in, API tokens, TLS pinning, app lock, Overview, the guest list and detail, power actions, task tracking, and hiding power, console and shell actions the user lacks permission for all work.
 
 Still missing from milestone 1:
 - WebAuthn and OpenID Connect web sign-in
 - custom headers and client certificates for reverse proxies
 - opt-in saved passwords
-- hiding actions the user lacks permission for
 - global search
 - usage charts
 

@@ -4,7 +4,7 @@ import android.content.res.Resources
 import androidx.annotation.StringRes
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
-import io.github.zachelks.proxkeep.ui.ActionEvent
+import io.github.zachelks.proxkeep.data.ActionEvent
 
 /** The words that go with one power action. */
 private class ActionText(

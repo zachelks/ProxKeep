@@ -13,9 +13,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,6 +38,9 @@ sealed interface Session {
     data class Active(val profile: ServerProfile, val client: PveClient) : Session
 }
 
+/** A request needed the selected server, but there is no signed-in session. */
+class NotSignedInException : IOException("Not signed in")
+
 /**
  * Owns the saved servers and the current session.
  *
@@ -43,8 +49,8 @@ sealed interface Session {
  * encrypted secret.
  */
 class ServerRepository(
-    private val store: ProfileStore,
-    private val secrets: SecretBox,
+    private val store: ProfileStorage,
+    private val secrets: SecretCipher,
     private val http: OkHttpClient,
     private val scope: CoroutineScope,
 ) {
@@ -56,6 +62,15 @@ class ServerRepository(
 
     private val _session = MutableStateFlow<Session>(Session.None)
     val session: StateFlow<Session> = _session.asStateFlow()
+
+    /**
+     * The signed-in server's profile ID, or null when signed out. It changes
+     * when the server or the sign-in changes, not when a ticket is renewed,
+     * so data loaders can restart on it.
+     */
+    val activeProfileId: Flow<String?> = _session
+        .map { (it as? Session.Active)?.profile?.id }
+        .distinctUntilChanged()
 
     /** False until the saved servers have been read from storage. */
     private val _loaded = MutableStateFlow(false)
@@ -69,6 +84,24 @@ class ServerRepository(
                 _session.value = restoreSession(stored.active)
                 _loaded.value = true
             }
+        }
+    }
+
+    /**
+     * Runs [block] with the signed-in server's client. Every request for the
+     * selected server goes through here, so this is the one place that
+     * notices the server rejecting the session's credentials: the session is
+     * then signed out and the error passed on.
+     *
+     * @throws NotSignedInException when no server is signed in
+     */
+    suspend fun <T> request(block: suspend (PveClient) -> T): T {
+        val active = _session.value as? Session.Active ?: throw NotSignedInException()
+        try {
+            return block(active.client)
+        } catch (e: PveApiException) {
+            if (e.isAuthenticationFailure) sessionExpired(active.profile.id)
+            throw e
         }
     }
 

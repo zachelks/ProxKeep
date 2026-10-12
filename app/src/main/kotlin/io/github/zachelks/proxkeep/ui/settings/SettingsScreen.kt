@@ -3,7 +3,6 @@
 package io.github.zachelks.proxkeep.ui.settings
 
 import android.content.pm.PackageManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -49,7 +48,6 @@ private const val SOURCE_URL = "https://github.com/zachelks/ProxKeep"
 
 @Composable
 fun SettingsScreen(onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
     Scaffold(
         topBar = {
             TopAppBar(

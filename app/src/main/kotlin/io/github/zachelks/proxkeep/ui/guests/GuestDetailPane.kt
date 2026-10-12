@@ -49,7 +49,6 @@ import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
-import io.github.zachelks.proxkeep.ui.GuestDetail
 import io.github.zachelks.proxkeep.ui.cluster.StatusText
 import io.github.zachelks.proxkeep.ui.cluster.statusText
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
@@ -69,6 +68,8 @@ private const val BYTES_PER_MIB = 1024L * 1024L
  *
  * @param resource the guest's row in the cluster resource list, or null if it is no longer there
  * @param busyAction the power action in progress on this guest, if any
+ * @param canPowerManage whether the user may start, stop and otherwise control the guest
+ * @param canOpenConsole whether the user may open the guest's console
  * @param showBack true when the list is not visible beside this pane
  */
 @Composable
@@ -76,6 +77,8 @@ fun GuestDetailPane(
     resource: ClusterResource?,
     detail: GuestDetail?,
     busyAction: GuestAction?,
+    canPowerManage: Boolean,
+    canOpenConsole: Boolean,
     showBack: Boolean,
     onBack: () -> Unit,
     onAction: (GuestAction) -> Unit,
@@ -103,7 +106,7 @@ fun GuestDetailPane(
                     }
                 },
                 actions = {
-                    if (resource != null && hasTextConsole(resource, detail?.config)) {
+                    if (resource != null && canOpenConsole && hasTextConsole(resource, detail?.config)) {
                         IconButton(onClick = onOpenConsole) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_terminal),
@@ -140,17 +143,19 @@ fun GuestDetailPane(
                 }
             }
 
-            ActionButtons(
-                guestName = resource.name ?: resource.id,
-                actions = GuestAction.available(
-                    kind = resource.kind,
-                    isRunning = resource.status == "running",
-                    isPaused = paused,
-                    isTemplate = resource.isTemplate,
-                ),
-                enabled = busyAction == null,
-                onAction = onAction,
-            )
+            if (canPowerManage) {
+                ActionButtons(
+                    guestName = resource.name ?: resource.id,
+                    actions = GuestAction.available(
+                        kind = resource.kind,
+                        isRunning = resource.status == "running",
+                        isPaused = paused,
+                        isTemplate = resource.isTemplate,
+                    ),
+                    enabled = busyAction == null,
+                    onAction = onAction,
+                )
+            }
 
             if (resource.status == "running") UsageCard(resource)
 

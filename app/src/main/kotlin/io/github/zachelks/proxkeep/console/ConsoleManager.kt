@@ -9,9 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.IOException
 
@@ -31,9 +29,7 @@ class ConsoleManager(
         scope.launch {
             // A console belongs to the server it was opened on. Switching
             // server or signing out ends it.
-            repository.session
-                .map { (it as? Session.Active)?.profile?.id }
-                .distinctUntilChanged()
+            repository.activeProfileId
                 .drop(1)
                 .collect { close() }
         }
@@ -41,15 +37,14 @@ class ConsoleManager(
 
     /** Opens a console, replacing any that is already open. */
     fun open(target: ConsoleTarget, title: String) {
-        val active = repository.session.value as? Session.Active ?: return
+        if (repository.session.value !is Session.Active) return
         close()
         val session = ConsoleSession(context, title, target)
         _current.value = session
         scope.launch {
             try {
-                session.attach(active.client.openConsole(target, scope, session.channelListener))
+                session.attach(repository.request { it.openConsole(target, scope, session.channelListener) })
             } catch (e: PveApiException) {
-                if (e.isAuthenticationFailure) repository.sessionExpired(active.profile.id)
                 session.fail(e.statusMessage)
             } catch (e: IOException) {
                 session.fail(e.message)
