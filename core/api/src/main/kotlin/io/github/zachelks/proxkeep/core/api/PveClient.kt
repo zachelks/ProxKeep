@@ -17,6 +17,7 @@ import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.GuestStatus
+import io.github.zachelks.proxkeep.core.api.model.Permissions
 import io.github.zachelks.proxkeep.core.api.model.Realm
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.core.api.model.TaskLogLine
@@ -118,6 +119,20 @@ class PveClient(
         } else {
             LoginResult.Success(TicketCredentials(name, ticket, response.csrfToken), response.clustername)
         }
+    }
+
+    // --- Access ----------------------------------------------------------
+
+    /**
+     * What the credentials in use may do: the signed-in user's permissions,
+     * or an API token's own.
+     *
+     * @param path limits the answer to one path, for which the server then
+     *   works out every source of permissions, such as a guest's pool
+     */
+    suspend fun permissions(path: String? = null): Permissions {
+        val query = path?.let { mapOf("path" to it) }.orEmpty()
+        return Permissions.fromJson(call(get(listOf("access", "permissions"), query = query), JsonObject.serializer()))
     }
 
     // --- Cluster ---------------------------------------------------------
