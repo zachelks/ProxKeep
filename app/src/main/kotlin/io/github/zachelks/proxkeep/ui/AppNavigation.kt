@@ -19,6 +19,9 @@ import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.ui.backupjobs.BackupJobsScreen
 import io.github.zachelks.proxkeep.ui.config.GuestConfigScreen
 import io.github.zachelks.proxkeep.ui.create.CreateGuestScreen
+import io.github.zachelks.proxkeep.ui.datacenter.CephScreen
+import io.github.zachelks.proxkeep.ui.datacenter.CollectionScreen
+import io.github.zachelks.proxkeep.ui.datacenter.DatacenterScreen
 import io.github.zachelks.proxkeep.ui.nodes.NodeScreen
 import io.github.zachelks.proxkeep.ui.schema.SchemaEditRequest
 import io.github.zachelks.proxkeep.ui.schema.SchemaEditScreen
@@ -82,6 +85,11 @@ fun AppNavigation() {
                     onOpenRoute = navigator::open,
                 )
             }
+            entry<Route.Datacenter> { DatacenterScreen(onClose = { navigator.close(Route.Datacenter) }, onOpenRoute = navigator::open) }
+            entry<Route.Ceph> { CephScreen(onClose = { navigator.close(Route.Ceph) }, onOpenRoute = navigator::open) }
+            entry<Route.Collection> { route ->
+                CollectionScreen(route.specId, route.args, route.title, onClose = { navigator.close(route) }, onOpenRoute = navigator::open)
+            }
             entry<Route.BackupJobs> { BackupJobsScreen(onClose = { navigator.close(Route.BackupJobs) }, onOpenRoute = navigator::open) }
             entry<Route.Storage> { route ->
                 StorageScreen(route.node, route.storage, onClose = { navigator.close(route) }, onOpenRoute = navigator::open)
@@ -89,7 +97,7 @@ fun AppNavigation() {
             entry<Route.SchemaEdit> { route ->
                 SchemaEditScreen(
                     title = route.title,
-                    request = SchemaEditRequest(route.path, route.schemaPath, route.method, route.exclude.toSet(), route.presets),
+                    request = SchemaEditRequest(route.path, route.schemaPath, route.method, route.exclude.toSet(), route.presets, route.read),
                     onClose = { navigator.close(route) },
                 )
             }

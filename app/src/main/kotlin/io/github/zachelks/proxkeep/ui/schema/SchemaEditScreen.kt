@@ -30,7 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -71,6 +73,8 @@ fun SchemaEditScreen(
     var showAll by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) { viewModel.saved.collect { onClose() } }
+    val secret by viewModel.secret.collectAsStateWithLifecycle()
+    secret?.let { value -> SecretDialog(value, onDone = viewModel::secretShown) }
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
             val base = resources.getString(message.id)
@@ -153,4 +157,24 @@ fun visibleFields(form: SchemaForm, showAll: Boolean): Pair<List<FormField>, Int
     // A form with nothing set and nothing required would be empty; show everything instead.
     if (visible.isEmpty()) return ordered to 0
     return visible to ordered.size - visible.size
+}
+
+/** Shows a secret once, such as a new API token's, with a way to copy it. */
+@Composable
+private fun SecretDialog(secret: String, onDone: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = {},
+        title = { Text(stringResource(R.string.secret_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.secret_body))
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(secret, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 12.dp))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text(stringResource(R.string.action_done)) } },
+        dismissButton = { TextButton(onClick = { clipboard.setText(AnnotatedString(secret)) }) { Text(stringResource(R.string.action_copy)) } },
+    )
 }

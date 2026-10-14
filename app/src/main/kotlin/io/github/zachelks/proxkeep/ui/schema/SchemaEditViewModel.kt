@@ -37,6 +37,8 @@ import java.io.IOException
  *   `POST` to create one, starting empty
  * @property exclude settings the screen does not offer
  * @property presets values a new object starts with, such as its type
+ * @property read whether to read the object first; a `PUT` that adds rather
+ *   than changes, such as a permission, does not
  */
 data class SchemaEditRequest(
     val path: String,
@@ -44,6 +46,7 @@ data class SchemaEditRequest(
     val method: String,
     val exclude: Set<String> = emptySet(),
     val presets: Map<String, String> = emptyMap(),
+    val read: Boolean = method == "PUT",
 )
 
 /** The form for one API object, built from its method in the server's schema. */
@@ -65,6 +68,20 @@ class SchemaEditViewModel(
     /** Emits once the change has been saved, so the screen can close. */
     val saved: SharedFlow<Unit> = _saved.asSharedFlow()
 
+    private val _secret = MutableStateFlow<String?>(null)
+
+    /**
+     * A secret the server returned once, such as a new API token's, which
+     * the person must copy before the screen closes.
+     */
+    val secret: StateFlow<String?> = _secret.asStateFlow()
+
+    /** The person has seen the secret; the screen can close. */
+    fun secretShown() {
+        _secret.value = null
+        _saved.tryEmit(Unit)
+    }
+
     private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = MESSAGE_BUFFER)
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
@@ -82,7 +99,7 @@ class SchemaEditViewModel(
                 val found = schemas.schema().method(request.schemaPath, request.method)
                     ?: throw IOException("The server's schema has no ${request.method} ${request.schemaPath}")
                 method = found
-                val values = if (request.method == "PUT") {
+                val values = if (request.read) {
                     val current = servers.request { it.read(request.path) } as? JsonObject ?: JsonObject(emptyMap())
                     digest = (current["digest"] as? JsonPrimitive)?.content
                     flatten(current)
@@ -113,7 +130,9 @@ class SchemaEditViewModel(
         _saving.value = true
         viewModelScope.launch {
             try {
-                val upid = servers.request { it.write(request.method, request.path, parameters) }
+                val data = servers.request { it.writeForData(request.method, request.path, parameters) }
+                val upid = (data as? JsonPrimitive)?.content?.takeIf { it.startsWith("UPID:") }
+                val returned = ((data as? JsonObject)?.get("value") as? JsonPrimitive)?.content
                 if (upid != null) {
                     val node = upid.split(':').getOrNull(1)?.takeIf { it.isNotEmpty() }
                     if (node != null) {
@@ -125,7 +144,7 @@ class SchemaEditViewModel(
                     }
                 }
                 refreshSignal.request()
-                _saved.emit(Unit)
+                if (returned != null) _secret.value = returned else _saved.emit(Unit)
             } catch (e: PveApiException) {
                 if (e.parameterErrors.isNotEmpty()) {
                     _form.update { state ->

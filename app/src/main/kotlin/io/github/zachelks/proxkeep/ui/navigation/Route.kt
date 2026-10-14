@@ -77,7 +77,20 @@ sealed interface Route {
         val method: String,
         val exclude: List<String> = emptyList(),
         val presets: Map<String, String> = emptyMap(),
+        val read: Boolean = method == "PUT",
     ) : Route
+
+    /** A datacenter collection, such as the firewall's aliases. See [io.github.zachelks.proxkeep.ui.datacenter.Collections]. */
+    @Serializable
+    data class Collection(val specId: String, val args: Map<String, String> = emptyMap(), val title: String? = null) : Route
+
+    /** The datacenter's sections. */
+    @Serializable
+    data object Datacenter : Route
+
+    /** Ceph's health and capacity. */
+    @Serializable
+    data object Ceph : Route
 
     /** The open remote desktop. */
     @Serializable

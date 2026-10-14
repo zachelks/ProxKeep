@@ -150,4 +150,20 @@ class NodeApiTest {
         assertEquals("/api2/json/nodes/pve1/network/vmbr9", server.takeRequest().path)
         assertFailsWith<IllegalArgumentException> { client.write("PATCH", "/x", emptyMap()) }
     }
+
+    @Test
+    fun aPathValueWithASlashStaysOneSegment(): Unit = runBlocking {
+        enqueue("""{"data":null}""")
+        client.write("DELETE", "/cluster/firewall/ipset/office/${encodePathValue("10.0.0.0/8")}", emptyMap())
+        assertEquals("/api2/json/cluster/firewall/ipset/office/10.0.0.0%2F8", server.takeRequest().path)
+        assertEquals("a%25b%2Fc", encodePathValue("a%b/c"))
+    }
+
+    @Test
+    fun aWriteCanReturnItsData(): Unit = runBlocking {
+        enqueue("""{"data":{"full-tokenid":"ops@pve!ci","value":"secret-uuid","info":{"privsep":1}}}""")
+        val data = client.writeForData("POST", "/access/users/ops@pve/token/ci", mapOf("privsep" to "1")) as JsonObject
+        assertEquals("secret-uuid", data["value"]?.jsonPrimitive?.content)
+        assertEquals("/api2/json/access/users/ops@pve/token/ci", server.takeRequest().path)
+    }
 }

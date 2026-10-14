@@ -289,9 +289,9 @@ fun InfrastructureScreen(
         item(key = "datacenter") {
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 ListItem(
-                    headlineContent = { Text(stringResource(R.string.backup_jobs_title)) },
-                    supportingContent = { Text(stringResource(R.string.backup_jobs_summary)) },
-                    modifier = Modifier.clickable { onOpenRoute(Route.BackupJobs) },
+                    headlineContent = { Text(stringResource(R.string.dc_card_title)) },
+                    supportingContent = { Text(stringResource(R.string.dc_card_summary)) },
+                    modifier = Modifier.clickable { onOpenRoute(Route.Datacenter) },
                 )
             }
         }

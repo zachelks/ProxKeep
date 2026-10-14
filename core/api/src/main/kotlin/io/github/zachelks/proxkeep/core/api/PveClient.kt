@@ -15,6 +15,7 @@ import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
 import io.github.zachelks.proxkeep.core.api.model.ApplianceTemplate
 import io.github.zachelks.proxkeep.core.api.model.BackupCompression
 import io.github.zachelks.proxkeep.core.api.model.BackupJob
+import io.github.zachelks.proxkeep.core.api.model.CephStatus
 import io.github.zachelks.proxkeep.core.api.model.BackupMode
 import io.github.zachelks.proxkeep.core.api.model.ChecksumAlgorithm
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
@@ -467,6 +468,10 @@ class PveClient(
     suspend fun downloadTemplate(node: String, storage: String, template: String): String? =
         callForTask(post(listOf("nodes", node, "aplinfo"), mapOf("storage" to storage, "template" to template)))
 
+    // --- Ceph ------------------------------------------------------------
+
+    suspend fun cephStatus(): CephStatus = CephStatus.fromJson(call(get(listOf("cluster", "ceph", "status")), JsonObject.serializer()))
+
     // --- Backup jobs -----------------------------------------------------
 
     /** The datacenter's scheduled backup jobs. */
@@ -502,7 +507,38 @@ class PveClient(
         else -> throw IllegalArgumentException("Unsupported method $method")
     }
 
-    private fun segments(path: String): List<String> = path.trim('/').split('/').filter { it.isNotEmpty() }
+    /**
+     * The segments of [path]. A segment that itself holds a slash, such as
+     * the `10.0.0.0/8` of an IP set entry, is written as `%2F`; see
+     * [encodePathValue].
+     */
+    private fun segments(path: String): List<String> =
+        path.trim('/').split('/').filter { it.isNotEmpty() }.map(::decodePercent)
+
+    /**
+     * Returns the data of a write to any path, for calls that answer with
+     * more than a task ID, such as creating an API token, which returns its
+     * secret once.
+     */
+    suspend fun writeForData(method: String, path: String, form: Map<String, String>): JsonElement? {
+        val request = when (method) {
+            "POST" -> post(segments(path), form)
+            "PUT" -> put(segments(path), form)
+            else -> throw IllegalArgumentException("Unsupported method $method")
+        }
+        val raw = execute(request)
+        if (raw.code in 200..299) {
+            val data = try {
+                PveJson.decodeFromString(ENVELOPE, raw.body).data
+            } catch (ignored: SerializationException) {
+                null
+            } catch (ignored: IllegalArgumentException) {
+                null
+            }
+            return data?.takeUnless { it is JsonNull }
+        }
+        return decode(raw, JsonElement.serializer())
+    }
 
     // --- Consoles --------------------------------------------------------
 
@@ -891,4 +927,33 @@ class PveClient(
             return null
         }
     }
+}
+
+/** Writes a value for one segment of a path given to [PveClient.read] or [PveClient.write], so slashes in it stay inside it. */
+fun encodePathValue(value: String): String = buildString {
+    for (char in value) {
+        when (char) {
+            '%' -> append("%25")
+            '/' -> append("%2F")
+            else -> append(char)
+        }
+    }
+}
+
+private fun decodePercent(segment: String): String {
+    if ('%' !in segment) return segment
+    val out = StringBuilder()
+    var index = 0
+    while (index < segment.length) {
+        val char = segment[index]
+        val hex = if (char == '%' && index + 2 <= segment.lastIndex) segment.substring(index + 1, index + 3).toIntOrNull(16) else null
+        if (hex != null) {
+            out.append(hex.toChar())
+            index += 3
+        } else {
+            out.append(char)
+            index++
+        }
+    }
+    return out.toString()
 }
