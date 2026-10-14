@@ -16,6 +16,23 @@ data class TicketCredentials(
     val csrfToken: String?,
 ) : Credentials {
     override fun toString(): String = "TicketCredentials(username=$username)"
+
+    companion object {
+        /** The name of the cookie the web interface keeps its ticket in. */
+        const val COOKIE_NAME = "PVEAuthCookie"
+
+        /**
+         * The user a ticket was issued to. Tickets have the form
+         * `PVE:user@realm:hex-time::signature`. Returns null for anything else,
+         * including a second-factor challenge, which is not a usable ticket.
+         */
+        fun usernameFromTicket(ticket: String): String? {
+            val parts = ticket.split(':')
+            if (parts.size < 3 || parts[0] != "PVE") return null
+            val user = parts[1]
+            return user.takeIf { '@' in it && !it.startsWith('!') }
+        }
+    }
 }
 
 /**

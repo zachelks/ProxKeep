@@ -240,6 +240,56 @@ class AddServerStateTest {
     }
 
     @Test
+    fun theServersOwnPageCanSignIn(): Unit = runBlocking {
+        fixture.route("/access/ticket") { request ->
+            val form = request.body.readUtf8()
+            assertTrue("password=PVE%3Aalice%40oidc%3Aweb" in form, form)
+            response("""{"data":{"username":"alice@oidc","ticket":"PVE:alice@oidc:renewed","CSRFPreventionToken":"csrf"}}""")
+        }
+        val state = trustedAtSignIn(realms = """[{"realm":"pam","type":"pam"},{"realm":"oidc","type":"openid"}]""")
+        assertTrue(state.hasWebRealms)
+
+        state.method = AuthMethod.Web
+        state.submitSignIn()
+        assertEquals(AddServerState.Step.WebSignIn, state.step)
+        assertEquals("https://$address/", state.webSignInUrl)
+        assertEquals(fixture.fingerprint, state.pinnedFingerprint)
+
+        state.completeWebSignIn("PVE:alice@oidc:web")
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        val session = assertIs<Session.Active>(repository.session.value)
+        assertEquals(TicketCredentials("alice@oidc", "PVE:alice@oidc:renewed", "csrf"), session.client.credentials)
+        assertEquals(AuthMethod.Web, session.profile.authMethod)
+    }
+
+    @Test
+    fun aPageSessionTheServerRefusesReturnsToSignIn(): Unit = runBlocking {
+        fixture.route("/access/ticket", """{"data":null}""", code = 401)
+        val state = trustedAtSignIn()
+        state.method = AuthMethod.Web
+        state.submitSignIn()
+
+        state.completeWebSignIn("PVE:alice@oidc:expired")
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.SignIn, state.step)
+        assertEquals(UiMessage(R.string.error_sign_in_rejected), state.error)
+    }
+
+    @Test
+    fun backFromThePageReturnsToSignIn(): Unit = runBlocking {
+        val state = trustedAtSignIn()
+        state.method = AuthMethod.Web
+        state.submitSignIn()
+
+        assertTrue(state.back())
+
+        assertEquals(AddServerState.Step.SignIn, state.step)
+    }
+
+    @Test
     fun aRejectedPasswordStaysOnSignIn(): Unit = runBlocking {
         fixture.route("/access/ticket", """{"data":null}""", code = 401)
         val state = trustedAtSignIn()

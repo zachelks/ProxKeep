@@ -45,7 +45,7 @@ class AddServerState(
     existingHeaders: List<HttpHeader> = emptyList(),
     existingPassword: String? = null,
 ) {
-    enum class Step { Address, Certificate, SignIn, SecondFactor, Done }
+    enum class Step { Address, Certificate, SignIn, SecondFactor, WebSignIn, Done }
 
     var step by mutableStateOf(Step.Address)
         private set
@@ -103,6 +103,18 @@ class AddServerState(
 
     private fun passwordPrincipal(): String? =
         existing?.takeIf { it.authMethod == AuthMethod.Password }?.principal
+
+    /** True when the server has realms that sign in through an external page, such as OpenID Connect. */
+    var hasWebRealms by mutableStateOf(false)
+        private set
+
+    /** The server's own login page, for [AuthMethod.Web]. */
+    val webSignInUrl: String?
+        get() = address?.let { "https://${it.display}/" }
+
+    /** The pinned certificate fingerprint the login page must present, if the platform does not trust it. */
+    val pinnedFingerprint: String?
+        get() = pin
 
     fun addHeader() {
         headers = headers + HttpHeader("", "")
@@ -184,6 +196,7 @@ class AddServerState(
 
     private fun showSignIn(target: ServerAddress, serverRealms: List<Realm>) {
         address = target
+        hasWebRealms = serverRealms.any { it.usesWebLogin }
         realms = serverRealms.filterNot { it.usesWebLogin }
         if (realms.isNotEmpty() && realms.none { it.realm == realm }) {
             realm = (realms.firstOrNull { it.isDefault } ?: realms.first()).realm
@@ -209,6 +222,10 @@ class AddServerState(
                         is LoginResult.SecondFactorRequired -> showSecondFactor(result)
                     }
                 }
+            }
+            AuthMethod.Web -> {
+                error = null
+                step = Step.WebSignIn
             }
             AuthMethod.ApiToken -> {
                 val id = tokenId.trim()
@@ -258,6 +275,36 @@ class AddServerState(
         }
     }
 
+    /**
+     * Takes over the session the login page created, once its ticket cookie
+     * appears. Renewing the ticket at once checks it and gets the token that
+     * write requests need, which the cookie does not carry.
+     */
+    fun completeWebSignIn(ticket: String) {
+        val target = address ?: return
+        val user = TicketCredentials.usernameFromTicket(ticket)
+        if (user == null) {
+            error = UiMessage(R.string.error_web_sign_in)
+            step = Step.SignIn
+            return
+        }
+        launch {
+            try {
+                val credentials = repository.newClient(target, pin, options).renewTicket(TicketCredentials(user, ticket, null))
+                finish(target, credentials, clusterName = null)
+            } finally {
+                if (step == Step.WebSignIn) step = Step.SignIn
+            }
+        }
+    }
+
+    /** Called when the login page stopped working. */
+    fun webPageLost() {
+        if (step != Step.WebSignIn) return
+        error = UiMessage(R.string.error_web_page_lost)
+        step = Step.SignIn
+    }
+
     private suspend fun finish(target: ServerAddress, credentials: Credentials, clusterName: String?) {
         val principal = when (credentials) {
             is TicketCredentials -> credentials.username
@@ -294,6 +341,10 @@ class AddServerState(
             Step.SecondFactor -> {
                 code = ""
                 challenge = null
+                step = Step.SignIn
+                true
+            }
+            Step.WebSignIn -> {
                 step = Step.SignIn
                 true
             }

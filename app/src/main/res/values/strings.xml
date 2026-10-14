@@ -61,6 +61,7 @@
     <string name="sign_in_title">Sign in</string>
     <string name="method_password">Password</string>
     <string name="method_token">API token</string>
+    <string name="method_web">Browser</string>
     <string name="field_username">User name</string>
     <string name="field_realm">Realm</string>
     <string name="field_password">Password</string>
@@ -90,8 +91,8 @@
     <string name="error_secure_connection">A secure connection couldn\'t be set up.</string>
     <string name="error_generic">Something went wrong.</string>
     <string name="error_certificate_changed_again">The server presented a different certificate again. Check the new fingerprint below.</string>
-    <string name="error_security_key_unsupported">This account signs in with a security key, which this version doesn\'t support yet. Use an API token instead.</string>
-    <string name="error_second_factor_unsupported">This account uses a second factor this version doesn\'t support. Use an API token instead.</string>
+    <string name="error_security_key_unsupported">This account signs in with a security key. Choose Browser to sign in on the server\'s own page.</string>
+    <string name="error_second_factor_unsupported">This account uses a second factor the app can\'t ask for. Choose Browser to sign in on the server\'s own page.</string>
     <string name="refresh_failed">Couldn\'t refresh. Showing the last data received.</string>
 
     <!-- Cluster screens -->
@@ -364,4 +365,13 @@
     <!-- Saved passwords -->
     <string name="save_password">Save password on this device</string>
     <string name="password_saved_explained">The password is stored encrypted on this device. The app uses it to sign in again by itself. Accounts with a second factor still ask for the code.</string>
+
+    <!-- Web sign-in -->
+    <string name="web_sign_in_title">Server sign-in page</string>
+    <string name="web_sign_in_explained">Sign in on the server\'s own page, inside the app. Use this for security keys and single sign-on. The app takes over the session when you\'re done and keeps nothing else from the page.</string>
+    <string name="web_sign_in_realms">This server offers single sign-on, which works only this way.</string>
+    <string name="web_sign_in_security_keys">Security keys work on the page only if the server\'s domain allows this app. Otherwise, sign in with a password and a code, or an API token.</string>
+    <string name="action_open_sign_in_page">Open sign-in page</string>
+    <string name="error_web_page_lost">The sign-in page stopped working. Try again.</string>
+    <string name="error_web_sign_in">The page didn\'t produce a usable session. Try again.</string>
 </resources>

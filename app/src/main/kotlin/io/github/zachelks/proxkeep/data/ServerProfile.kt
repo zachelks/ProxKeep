@@ -4,7 +4,13 @@ import io.github.zachelks.proxkeep.core.api.ServerAddress
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class AuthMethod { Password, ApiToken }
+enum class AuthMethod {
+    Password,
+    ApiToken,
+
+    /** The server's own login page in the app, for security keys and OpenID Connect. */
+    Web,
+}
 
 /**
  * A saved server.

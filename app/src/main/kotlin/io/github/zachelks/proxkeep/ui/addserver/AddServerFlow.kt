@@ -93,6 +93,22 @@ fun AddServerFlow(state: AddServerState, onClose: () -> Unit) {
             )
         },
     ) { innerPadding ->
+        val url = state.webSignInUrl
+        if (state.step == Step.WebSignIn && url != null) {
+            // The page needs the whole screen, and scrolls by itself.
+            Column(modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).imePadding()) {
+                if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                WebSignInPage(
+                    url = url,
+                    pinnedFingerprint = state.pinnedFingerprint,
+                    clientCertAlias = state.clientCertAlias,
+                    onTicket = state::completeWebSignIn,
+                    onPageLost = state::webPageLost,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            return@Scaffold
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -117,7 +133,7 @@ fun AddServerFlow(state: AddServerState, onClose: () -> Unit) {
                     Step.Certificate -> CertificateStep(state)
                     Step.SignIn -> SignInStep(state)
                     Step.SecondFactor -> SecondFactorStep(state)
-                    Step.Done -> Unit
+                    Step.WebSignIn, Step.Done -> Unit
                 }
                 state.error?.let { message ->
                     Text(
@@ -136,6 +152,7 @@ private fun titleFor(state: AddServerState): Int = when (state.step) {
     Step.Certificate -> R.string.certificate_title
     Step.SignIn, Step.Done -> R.string.sign_in_title
     Step.SecondFactor -> R.string.second_factor_title
+    Step.WebSignIn -> R.string.web_sign_in_title
 }
 
 @Composable
@@ -340,7 +357,7 @@ private fun CertificateField(label: String, value: @Composable () -> Unit) {
 
 @Composable
 private fun SignInStep(state: AddServerState) {
-    val methods = listOf(AuthMethod.Password, AuthMethod.ApiToken)
+    val methods = listOf(AuthMethod.Password, AuthMethod.ApiToken, AuthMethod.Web)
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         methods.forEachIndexed { index, method ->
             SegmentedButton(
@@ -348,7 +365,15 @@ private fun SignInStep(state: AddServerState) {
                 onClick = { state.method = method },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = methods.size),
             ) {
-                Text(stringResource(if (method == AuthMethod.Password) R.string.method_password else R.string.method_token))
+                Text(
+                    stringResource(
+                        when (method) {
+                            AuthMethod.Password -> R.string.method_password
+                            AuthMethod.ApiToken -> R.string.method_token
+                            AuthMethod.Web -> R.string.method_web
+                        },
+                    ),
+                )
             }
         }
     }
@@ -417,6 +442,17 @@ private fun SignInStep(state: AddServerState) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        AuthMethod.Web -> {
+            Text(text = stringResource(R.string.web_sign_in_explained), style = MaterialTheme.typography.bodyMedium)
+            if (state.hasWebRealms) {
+                Text(text = stringResource(R.string.web_sign_in_realms), style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                text = stringResource(R.string.web_sign_in_security_keys),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         AuthMethod.ApiToken -> {
             OutlinedTextField(
                 value = state.tokenId,
@@ -459,7 +495,7 @@ private fun SignInStep(state: AddServerState) {
         enabled = !state.busy,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(stringResource(R.string.action_sign_in))
+        Text(stringResource(if (state.method == AuthMethod.Web) R.string.action_open_sign_in_page else R.string.action_sign_in))
     }
 }
 
