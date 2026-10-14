@@ -7,6 +7,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import io.github.zachelks.proxkeep.console.ConsoleManager
+import io.github.zachelks.proxkeep.console.ConsoleService
 import io.github.zachelks.proxkeep.data.AppSettings
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.GuestActions
@@ -18,9 +19,14 @@ import io.github.zachelks.proxkeep.data.ServerAccessRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.security.AppLock
 import io.github.zachelks.proxkeep.security.Authenticator
+import io.github.zachelks.proxkeep.ui.navigation.PendingNavigation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -74,6 +80,8 @@ class AppContainer(context: Context) {
 
     val consoles = ConsoleManager(context.applicationContext, repository, scope)
 
+    val pendingNavigation = PendingNavigation()
+
     val settings = AppSettings(context)
 
     val appLock = AppLock(
@@ -83,6 +91,17 @@ class AppContainer(context: Context) {
     )
 
     val authenticator = Authenticator(appLock)
+
+    init {
+        // Open consoles keep the process alive in the background. The service stops itself after the last one.
+        scope.launch {
+            consoles.sessions
+                .map { it.isNotEmpty() }
+                .distinctUntilChanged()
+                .filter { it }
+                .collect { ConsoleService.start(context.applicationContext) }
+        }
+    }
 
     private companion object {
         const val CONNECT_TIMEOUT_SECONDS = 10L

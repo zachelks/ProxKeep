@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -8,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.zachelks.proxkeep.ui.AppRoot
+import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -16,6 +18,9 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // A recreated activity has handled its intent already.
+        if (savedInstanceState == null) handle(intent)
 
         val settings = (application as ProxKeepApplication).container.settings
         lifecycleScope.launch {
@@ -26,6 +31,17 @@ class MainActivity : FragmentActivity() {
             AppTheme {
                 AppRoot()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handle(intent)
+    }
+
+    private fun handle(intent: Intent?) {
+        if (intent?.action == ACTION_OPEN_TERMINAL) {
+            (application as ProxKeepApplication).container.pendingNavigation.request(Route.Terminal)
         }
     }
 
@@ -43,5 +59,10 @@ class MainActivity : FragmentActivity() {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
+    }
+
+    companion object {
+        /** Opens the terminal, from the console notification. */
+        const val ACTION_OPEN_TERMINAL = "io.github.zachelks.proxkeep.action.OPEN_TERMINAL"
     }
 }

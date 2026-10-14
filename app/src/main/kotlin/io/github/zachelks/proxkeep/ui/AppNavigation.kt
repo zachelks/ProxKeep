@@ -26,6 +26,11 @@ import io.github.zachelks.proxkeep.ui.settings.SettingsScreen
 fun AppNavigation() {
     val backStack = rememberBackStack()
     val navigator = remember(backStack) { Navigator(backStack) }
+    val pending = appContainer().pendingNavigation
+    val requested by pending.route.collectAsStateWithLifecycle()
+    LaunchedEffect(requested) {
+        pending.take()?.let(navigator::open)
+    }
 
     NavDisplay(
         backStack = backStack,

@@ -383,4 +383,13 @@
     <string name="action_open_sign_in_page">Open sign-in page</string>
     <string name="error_web_page_lost">The sign-in page stopped working. Try again.</string>
     <string name="error_web_sign_in">The page didn\'t produce a usable session. Try again.</string>
+
+    <!-- Console notification -->
+    <string name="console_notification_channel">Open consoles</string>
+    <string name="console_notification_channel_description">Shown while consoles stay connected in the background.</string>
+    <string name="console_notification_end_all">End all</string>
+    <plurals name="console_notification_title">
+        <item quantity="one">%d console open</item>
+        <item quantity="other">%d consoles open</item>
+    </plurals>
 </resources>
