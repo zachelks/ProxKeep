@@ -39,7 +39,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 ## Modules
 
 - `core:api`: a plain Kotlin/JVM module with no Android dependencies. It holds the Proxmox client (`PveClient`), models, lenient JSON, TLS trust, the console websocket and the VNC client (`vnc/`). Keep Android types out of it so its tests run on the JVM against `MockWebServer`, including real TLS handshakes.
-- `app`: the Android application.
+- `app`: the Android application. Background work uses WorkManager; the widget uses Glance.
 - `terminal:emulator` and `terminal:view` are vendored from Termux. They are unmodified apart from a rewritten `TerminalSession.java`, which uses a `Transport` instead of a local process. Read `terminal/README.md` before you touch them. Keep changes out of these modules where possible, so upstream updates stay a copy-over.
 
 ## Architecture
@@ -81,6 +81,18 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - `GuestConfigViewModel` serves a guest's settings screen. It reads the configuration when the screen opens and after each change, not on a timer, so an open form is never replaced. Every change carries the configuration's digest, so a change made elsewhere meanwhile is refused, not overwritten. Virtual machines apply changes as a task (POST); containers apply them at once (PUT).
 - Hardware is edited by hand (`ui/config/Hardware.kt`, `HardwareDialogs.kt`); `HardwareFormats` covers its property strings without the schema. Options come from the schema, minus the keys `hardwareKeys` lists.
 - The create wizards (`ui/create/`) are hand-designed. `VmDraft` and `CtDraft` check each step and build the creation parameters; they are plain and tested.
+
+**Nodes, storage and backups.**
+- `NodeViewModel` serves a node's screen (`ui/nodes/`): each tab's data is its own `StateFlow`, so a part loads only while its tab is on screen. Power actions, service actions and network changes run through one `run` that follows the task and reports on `messages`.
+- `SchemaEditScreen` (`Route.SchemaEdit`) edits or creates any API object from its method in the schema: `PUT` reads the object first, `POST` starts from presets. It sends only what changed, with the object's digest. Use it for long-tail forms, such as network interfaces, storage configuration and backup jobs. `PveClient.read` and `write` reach any path for it.
+- `StorageTransfers` runs uploads and downloads at app level, like `GuestLifecycle`, so they outlive the screen; they end with the process. Uploads stream from a `ContentResolver` in `PveClient.upload`, with no write timeout.
+- `BackupJobsViewModel.runPlan` runs a job now on each node that holds its guests, because a backup runs where its guests are. `GuestLifecycle.restoreAsNew` and `backupKind` serve restoring a backup beside its guest.
+
+**Background work.**
+- `StatusWorker` (WorkManager) runs while alerts are on or a widget or tile is placed. It checks every saved server it can reach without the person (`ServerRepository.backgroundClient`: the session's client, an API token, or a saved password without a second factor) and records the signed-in server's `StatusSnapshot`. A saved password rejected in the background is forgotten, as on sign-in.
+- `AlertChecker` is plain and tested: the first check of a server only records what it sees; later ones report failed tasks and nodes going offline or coming back. `AlertNotifier` keeps details off the lock screen.
+- `StatusSurfaces` holds the snapshot for `StatusWidget` (Glance) and `StatusTileService`. Both hide server details while the app lock is on.
+- `PendingNavigation` also carries a destination, a search request and a guest from notifications and app shortcuts. Recently opened guests become dynamic shortcuts (`GuestShortcuts.kt`).
 
 **Remote desktop.**
 - `RfbClient` (core:api `vnc/`) speaks the VNC protocol: versions 3.3 to 3.8, no authentication or VNC passwords, and the Raw, CopyRect and ZRLE encodings, with resizes and a client-drawn pointer. `VncConnection` carries it over the server's `vncwebsocket` relay, with the bytes in binary messages; `PveClient.openDesktop` asks for a VNC proxy with a generated password first.
@@ -127,4 +139,6 @@ VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 5, Configuration.** Done in code: schema-driven options, hand-designed hardware editing (processor, memory, disks, CD and DVD drives, network devices), cloud-init settings, pending changes, and wizards for new virtual machines and containers. Not yet confirmed against a real server. Moving disks between storages is not done.
 
-**Milestones 6 to 9.** Not started.
+**Milestone 6, Nodes, storage and alerts.** Done in code: node management (summary and history, updates with an upgrade console, services, network interfaces, DNS and time, certificates, disks and SMART, the system journal, reboot and shutdown), the storage browser with uploads, downloads from a URL and the template catalog, storage configuration, backup jobs, restoring as a new guest, background alerts, a status widget, a Quick Settings tile and app shortcuts. Not yet confirmed against a real server. Transfers stop if Android ends the app's process; a foreground service would keep them going. The network tab does not show the pending configuration's difference.
+
+**Milestones 7 to 9.** Not started.
