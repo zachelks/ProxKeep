@@ -69,15 +69,21 @@ data class SchemaForm(
          * A numbered setting such as `serial[n]` gets one field for each key [values] has, such as `serial0`.
          *
          * @param exclude keys and numbered keys' base names that a hand-designed screen edits instead
+         * @param extraKeys numbered keys to offer even when [values] lacks them
          */
-        fun fieldsFor(method: ApiMethod, values: Map<String, String>, exclude: Set<String> = emptySet()): List<FormField> =
+        fun fieldsFor(
+            method: ApiMethod,
+            values: Map<String, String>,
+            exclude: Set<String> = emptySet(),
+            extraKeys: Collection<String> = emptyList(),
+        ): List<FormField> =
             method.parameters
                 .filterNot { it.name in CONTROL_KEYS || it.name in exclude || it.baseName in exclude || it.isAlias }
                 .flatMap { schema ->
                     if (!schema.isIndexed) {
                         listOf(FormField(schema.name, schema))
                     } else {
-                        values.keys.filter(schema::matches)
+                        (values.keys + extraKeys).distinct().filter(schema::matches)
                             .sortedBy { it.removePrefix(schema.baseName).toInt() }
                             .map { FormField(it, schema) }
                     }

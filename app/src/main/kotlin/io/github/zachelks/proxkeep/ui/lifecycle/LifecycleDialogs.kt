@@ -38,12 +38,14 @@ import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.Privilege
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.ui.components.CheckRow
+import io.github.zachelks.proxkeep.ui.components.RadioChoices
 import io.github.zachelks.proxkeep.ui.text
 
 /** A lifecycle action offered in a guest's menu. */
-enum class LifecycleMenuItem { Snapshots, Backups, Migrate, Clone, ConvertToTemplate, Delete }
+enum class LifecycleMenuItem { Configure, Snapshots, Backups, Migrate, Clone, ConvertToTemplate, Delete }
 
-/** Shows the dialog for [item]; [onDone] closes it. Snapshots and backups have screens of their own instead. */
+/** Shows the dialog for [item]; [onDone] closes it. Settings, snapshots and backups have screens of their own instead. */
 @Composable
 fun LifecycleDialog(item: LifecycleMenuItem, guest: ClusterResource, viewModel: LifecycleViewModel, onDone: () -> Unit) {
     val name = guest.name ?: guest.vmid?.toString() ?: guest.id
@@ -62,7 +64,7 @@ fun LifecycleDialog(item: LifecycleMenuItem, guest: ClusterResource, viewModel: 
             onDismiss = onDone,
         )
         LifecycleMenuItem.Delete -> DeleteDialog(guest, name, viewModel, onDone)
-        LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups -> onDone()
+        LifecycleMenuItem.Configure, LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups -> onDone()
     }
 }
 
@@ -99,7 +101,7 @@ private fun MigrateDialog(guest: ClusterResource, name: String, viewModel: Lifec
                                         },
                                     ),
                                 )
-                                Choices(value.targets, target ?: value.targets.first(), label = { it }) { target = it }
+                                RadioChoices(value.targets, target ?: value.targets.first(), label = { it }) { target = it }
                                 if (value.localDisks.isNotEmpty()) {
                                     CheckRow(stringResource(R.string.migrate_copy_disks, value.localDisks.joinToString(", ")), copyDisks) { copyDisks = it }
                                 }
@@ -169,11 +171,11 @@ private fun CloneDialog(guest: ClusterResource, name: String, viewModel: Lifecyc
                         }
                         if (state.value.nodes.size > 1) {
                             Text(stringResource(R.string.clone_target_node), style = MaterialTheme.typography.labelLarge)
-                            Choices(state.value.nodes, node ?: guest.node.orEmpty(), label = { it }) { node = it }
+                            RadioChoices(state.value.nodes, node ?: guest.node.orEmpty(), label = { it }) { node = it }
                         }
                         if (full && state.value.storages.isNotEmpty()) {
                             Text(stringResource(R.string.clone_target_storage), style = MaterialTheme.typography.labelLarge)
-                            Choices(listOf("") + state.value.storages, storage.orEmpty(), label = { it.ifEmpty { sameStorage } }) {
+                            RadioChoices(listOf("") + state.value.storages, storage.orEmpty(), label = { it.ifEmpty { sameStorage } }) {
                                 storage = it.ifEmpty { null }
                             }
                         }
@@ -232,36 +234,6 @@ private fun DeleteDialog(guest: ClusterResource, name: String, viewModel: Lifecy
     )
 }
 
-@Composable
-private fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
-    Column(modifier = Modifier.selectableGroup()) {
-        options.forEach { option ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectable(selected = option == selected, onClick = { onSelect(option) }, role = Role.RadioButton)
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = option == selected, onClick = null)
-                Spacer(Modifier.width(12.dp))
-                Text(label(option))
-            }
-        }
-    }
-}
-
-@Composable
-private fun CheckRow(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = checked, onCheckedChange = null)
-        Text(text, modifier = Modifier.padding(start = 12.dp))
-    }
-}
-
 /** Guest IDs below 100 are reserved. */
 private const val MIN_GUEST_ID = 100
 
@@ -275,6 +247,7 @@ private const val MIN_GUEST_ID = 100
  */
 fun availableLifecycleItems(guest: ClusterResource, allows: (String) -> Boolean, onlineNodes: Int): List<LifecycleMenuItem> = buildList {
     val template = guest.isTemplate
+    if (allows(Privilege.VM_AUDIT)) add(LifecycleMenuItem.Configure)
     if (!template && (allows(Privilege.VM_SNAPSHOT) || allows(Privilege.VM_SNAPSHOT_ROLLBACK))) add(LifecycleMenuItem.Snapshots)
     if (allows(Privilege.VM_BACKUP)) add(LifecycleMenuItem.Backups)
     if (onlineNodes > 1 && allows(Privilege.VM_MIGRATE)) add(LifecycleMenuItem.Migrate)
@@ -285,6 +258,7 @@ fun availableLifecycleItems(guest: ClusterResource, allows: (String) -> Boolean,
 
 val LifecycleMenuItem.label: Int
     get() = when (this) {
+        LifecycleMenuItem.Configure -> R.string.action_configure
         LifecycleMenuItem.Snapshots -> R.string.action_snapshots
         LifecycleMenuItem.Backups -> R.string.action_backups
         LifecycleMenuItem.Migrate -> R.string.action_migrate

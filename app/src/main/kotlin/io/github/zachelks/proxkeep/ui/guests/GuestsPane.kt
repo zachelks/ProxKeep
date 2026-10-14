@@ -173,6 +173,7 @@ fun GuestsPane(
                             lifecycleBusy = lifecycleBusy[selectedId],
                             onLifecycle = { item ->
                                 when (item) {
+                                    LifecycleMenuItem.Configure -> onOpenRoute(Route.GuestConfig(selectedId))
                                     LifecycleMenuItem.Snapshots -> onOpenRoute(Route.Snapshots(selectedId))
                                     LifecycleMenuItem.Backups -> onOpenRoute(Route.Backups(selectedId))
                                     else -> lifecycleDialog = selectedId to item

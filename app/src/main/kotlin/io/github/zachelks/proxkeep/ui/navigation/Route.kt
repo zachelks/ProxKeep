@@ -41,6 +41,10 @@ sealed interface Route {
     @Serializable
     data class Backups(val resourceId: String) : Route
 
+    /** A guest's hardware and settings. */
+    @Serializable
+    data class GuestConfig(val resourceId: String) : Route
+
     /** The open remote desktop. */
     @Serializable
     data object Desktop : Route

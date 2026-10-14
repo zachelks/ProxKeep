@@ -78,7 +78,7 @@ private fun BooleanField(
     enabled: Boolean,
 ) {
     val checked = isOn(value.ifEmpty { schema.default.orEmpty() })
-    val state = stringResource(if (checked) R.string.state_on else R.string.state_off)
+    val state = stringResource(if (checked) R.string.switch_on else R.string.switch_off)
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(modifier = Modifier.weight(1f)) {
