@@ -22,7 +22,19 @@ Requires JDK 17+ and the Android SDK (API 37 platform). CI uses JDK 21.
 
 CI (`.github/workflows/ci.yml`) runs all of the above on every push. `.github/scripts/report_results.py` repeats test failures, compiler errors and lint findings as GitHub annotations, which can be read through the GitHub API when raw logs can't. The debug APK is uploaded as the `app-debug` artifact.
 
-Cloud sessions have JDK 21 and an Android SDK (`ANDROID_HOME=/opt/android-sdk`, API 37 platform), so all of the commands above run there too. Gradle downloads the build-tools it needs. On a cold cache, Maven Central sometimes answers with HTTP 429. Re-run the build when that happens; Gradle keeps what already downloaded, and `--max-workers=2` makes it less likely. Nothing has an instrumented test or emulator setup. Behavior on a device and against a real server is checked by hand, which is why every pull request ends with a "How to test" list.
+Cloud sessions have JDK 21 and an Android SDK (`ANDROID_HOME=/opt/android-sdk`, API 37 platform), so all of the commands above run there too. Gradle downloads the build-tools it needs. On a cold cache, Maven Central sometimes answers with HTTP 429. Re-run the build when that happens; Gradle keeps what already downloaded, and `--max-workers=2` makes it less likely. Robolectric downloads its Android image from Maven Central on the first test run, so that run can hit the same limit.
+
+Nothing has an instrumented test or emulator setup. Behavior on a device and against a real server is checked by hand, which is why every pull request ends with a "How to test" list.
+
+## Tests
+
+App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that works:
+
+- Plain JVM for code without Android types: repositories, view models, `AddServerState`, `Navigator`, `AppLock`. View model tests use `MainDispatcherRule`, which moves the main dispatcher to background threads. Cancel `viewModelScope` in teardown.
+- Robolectric (`@RunWith(RobolectricTestRunner::class)`) for code that needs the Android framework or the app's resources: `ProfileStore`, `AppSettings`, the console classes, and anything that takes a `Context`.
+- Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`.
+
+`PinnedServer` (`data/TestServers.kt`) is a `MockWebServer` with a pinned self-signed certificate. `enqueue` answers requests in order. `route` answers by path, which suits loaders that poll several endpoints at once. Over HTTPS it speaks HTTP/2, which has no reason phrase, so put an error's text in the body's `message` field, as Proxmox does.
 
 ## Modules
 
@@ -39,7 +51,7 @@ Cloud sessions have JDK 21 and an Android SDK (`ANDROID_HOME=/opt/android-sdk`, 
 - `activeProfileId` changes only when the server or sign-in changes, not on ticket renewal. Loaders `flatMapLatest` on it, so a server switch cancels in-flight loads and data from one server is never shown under another.
 - `PveClient` is immutable. `withCredentials` returns a new client, and ticket renewal (every 30 minutes) swaps the client inside `Session.Active`.
 - Login tickets live only in memory. API token secrets are encrypted by `SecretBox` with an Android Keystore AES-GCM key.
-- `ServerRepository` depends on the `ProfileStorage` and `SecretCipher` interfaces (`data/Storage.kt`), so it and the loaders are unit-tested on the JVM against a `MockWebServer` with a pinned certificate (`app/src/test/.../data/TestServers.kt`).
+- `ServerRepository` depends on the `ProfileStorage` and `SecretCipher` interfaces (`data/Storage.kt`), so it and the loaders are unit-tested on the JVM against `PinnedServer` (see Tests above).
 
 **TLS.** `ServerTrust` accepts a certificate only if the platform trusts it or its SHA-256 fingerprint matches the profile's pin. Each server gets a copy of the shared OkHttp client carrying its own trust settings. `probeServer` makes first contact and reports an untrusted certificate rather than sending anything. Never add a trust-all path.
 

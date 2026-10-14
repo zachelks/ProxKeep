@@ -1,0 +1,163 @@
+package io.github.zachelks.proxkeep.ui.guests
+
+import android.content.Context
+import androidx.annotation.StringRes
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
+import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.model.ClusterResource
+import io.github.zachelks.proxkeep.core.api.model.GuestAction
+import io.github.zachelks.proxkeep.core.api.model.GuestConfig
+import io.github.zachelks.proxkeep.ui.theme.AppTheme
+import org.junit.Rule
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+/** The guest screen's power actions: which are offered, and which ask first. */
+@RunWith(RobolectricTestRunner::class)
+class GuestDetailPaneTest {
+
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val requested = mutableListOf<GuestAction>()
+    private val running = ClusterResource(id = "qemu/100", type = "qemu", node = "pve1", vmid = 100, name = "web", status = "running")
+
+    @Test
+    fun aStoppedGuestStartsWithoutAsking() {
+        show(running.copy(status = "stopped"))
+
+        compose.onNodeWithText(text(R.string.action_start)).performClick()
+
+        assertEquals(listOf(GuestAction.Start), requested)
+        compose.onNode(isDialog()).assertDoesNotExist()
+    }
+
+    @Test
+    fun shuttingDownAsksFirst() {
+        show(running)
+
+        compose.onNodeWithText(text(R.string.action_shutdown)).performClick()
+        compose.onNodeWithText(text(R.string.confirm_shutdown_title, "web")).assertIsDisplayed()
+        assertEquals(emptyList(), requested)
+
+        confirmWith(R.string.action_shutdown)
+        assertEquals(listOf(GuestAction.Shutdown), requested)
+    }
+
+    @Test
+    fun cancellingTheQuestionDoesNothing() {
+        show(running)
+
+        compose.onNodeWithText(text(R.string.action_shutdown)).performClick()
+        compose.onNodeWithText(text(R.string.action_cancel)).performClick()
+
+        compose.onNode(isDialog()).assertDoesNotExist()
+        assertEquals(emptyList(), requested)
+    }
+
+    @Test
+    fun stoppingIsBehindMoreAndAsksFirst() {
+        show(running)
+        compose.onNodeWithText(text(R.string.action_stop)).assertDoesNotExist()
+
+        compose.onNodeWithText(text(R.string.action_more_actions)).performClick()
+        compose.onNodeWithText(text(R.string.action_stop)).performClick()
+        compose.onNodeWithText(text(R.string.confirm_stop_title, "web")).assertIsDisplayed()
+        confirmWith(R.string.action_stop)
+
+        assertEquals(listOf(GuestAction.Stop), requested)
+    }
+
+    @Test
+    fun noActionsWithoutPermission() {
+        show(running, canPowerManage = false)
+
+        compose.onNodeWithText(text(R.string.action_shutdown)).assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.action_more_actions)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aGuestWithAnActionInProgressSaysSoAndTakesNoOther() {
+        show(running, busyAction = GuestAction.Shutdown)
+
+        compose.onNodeWithText(text(R.string.progress_shutdown)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.action_shutdown)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun aRunningContainerOffersItsConsole() {
+        show(running.copy(id = "lxc/200", type = "lxc", vmid = 200))
+
+        compose.onNodeWithContentDescription(text(R.string.action_open_console)).assertIsDisplayed()
+    }
+
+    @Test
+    fun aVirtualMachineWithASerialPortOffersItsConsole() {
+        show(running, detail = GuestDetail("qemu/100", config = GuestConfig(mapOf("serial0" to "socket"))))
+
+        compose.onNodeWithContentDescription(text(R.string.action_open_console)).assertIsDisplayed()
+    }
+
+    @Test
+    fun noConsoleWithoutASerialPort() {
+        show(running, detail = GuestDetail("qemu/100", config = GuestConfig(emptyMap())))
+
+        compose.onNodeWithContentDescription(text(R.string.action_open_console)).assertDoesNotExist()
+    }
+
+    @Test
+    fun noConsoleWithoutPermission() {
+        show(running.copy(id = "lxc/200", type = "lxc", vmid = 200), canOpenConsole = false)
+
+        compose.onNodeWithContentDescription(text(R.string.action_open_console)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aGuestThatIsGoneSaysSo() {
+        show(null)
+
+        compose.onNodeWithText(text(R.string.guest_gone)).assertIsDisplayed()
+    }
+
+    private fun show(
+        resource: ClusterResource?,
+        detail: GuestDetail? = null,
+        busyAction: GuestAction? = null,
+        canPowerManage: Boolean = true,
+        canOpenConsole: Boolean = true,
+    ) {
+        compose.setContent {
+            AppTheme {
+                GuestDetailPane(
+                    resource = resource,
+                    detail = detail,
+                    busyAction = busyAction,
+                    canPowerManage = canPowerManage,
+                    canOpenConsole = canOpenConsole,
+                    showBack = false,
+                    onBack = {},
+                    onAction = { requested += it },
+                    onOpenConsole = {},
+                )
+            }
+        }
+    }
+
+    private fun confirmWith(@StringRes label: Int) {
+        compose.onNode(hasText(text(label)) and hasAnyAncestor(isDialog())).performClick()
+    }
+
+    private fun text(@StringRes id: Int, vararg args: Any): String = context.getString(id, *args)
+}

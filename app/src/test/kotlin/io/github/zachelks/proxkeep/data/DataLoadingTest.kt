@@ -1,6 +1,7 @@
 package io.github.zachelks.proxkeep.data
 
 import io.github.zachelks.proxkeep.core.api.PveApiException
+import io.github.zachelks.proxkeep.core.api.auth.ApiTokenCredentials
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.Permissions
@@ -18,7 +19,10 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,6 +67,79 @@ class DataLoadingTest {
         assertEquals(loaded.resources, stale.resources)
         assertIs<PveApiException>(stale.refreshError)
         watcher.cancel()
+    }
+
+    @Test
+    fun clusterNeverShowsOneServersDataUnderAnother(): Unit = runBlocking {
+        PinnedServer("second").use { second ->
+            val repository = fixture.signedInRepository(scope)
+            val cluster = ClusterRepository(repository, refresh, scope)
+            fixture.route("/cluster/resources", """{"data":[{"id":"qemu/100","type":"qemu","node":"pve1","vmid":100}]}""")
+            second.route("/cluster/resources", """{"data":[{"id":"qemu/200","type":"qemu","node":"pve2","vmid":200}]}""")
+            val seen = CopyOnWriteArrayList<ClusterState>()
+            val watcher = scope.launch { cluster.state.collect { seen += it } }
+            withTimeout(TIMEOUT_MS) { cluster.state.first { it is ClusterState.Loaded } }
+
+            repository.saveAndActivate(second.profile, ApiTokenCredentials(second.profile.principal, "secret"))
+            withTimeout(TIMEOUT_MS) { cluster.state.first { (it as? ClusterState.Loaded)?.profileId == second.profile.id } }
+            watcher.cancel()
+
+            val lastFirst = seen.indexOfLast { (it as? ClusterState.Loaded)?.profileId == fixture.profile.id }
+            val firstSecond = seen.indexOfFirst { (it as? ClusterState.Loaded)?.profileId == second.profile.id }
+            assertTrue(lastFirst < firstSecond)
+            assertTrue(seen.subList(lastFirst, firstSecond).contains(ClusterState.Loading), "the switch shows loading, not the old list")
+            assertEquals(listOf("qemu/200"), (seen[firstSecond] as ClusterState.Loaded).resources.map { it.id })
+        }
+    }
+
+    @Test
+    fun aFirstLoadThatFailsIsReported(): Unit = runBlocking {
+        val cluster = ClusterRepository(fixture.signedInRepository(scope), refresh, scope)
+        fixture.route("/cluster/resources", """{"data":null}""", code = 500, reason = "Internal error")
+
+        val failed = withTimeout(TIMEOUT_MS) { cluster.state.first { it is ClusterState.Failed } }
+
+        assertIs<PveApiException>(assertIs<ClusterState.Failed>(failed).error)
+    }
+
+    @Test
+    fun clusterWaitsForASignedInServer(): Unit = runBlocking {
+        val repository = fixture.signedInRepository(scope)
+        repository.signOut()
+        val cluster = ClusterRepository(repository, refresh, scope)
+        val watcher = scope.launch { cluster.state.collect {} }
+
+        delay(200)
+
+        assertEquals(ClusterState.Loading, cluster.state.value)
+        assertTrue(fixture.requestedPaths.isEmpty())
+        watcher.cancel()
+    }
+
+    @Test
+    fun accessKeepsWhatItReadBeforeWhenAPartFails() = runTest {
+        val repository = fixture.signedInRepository(backgroundScope)
+        val accessRepository = ServerAccessRepository(repository, backgroundScope)
+        val versionReads = AtomicInteger()
+        val permissionReads = AtomicInteger()
+        fixture.route("/version") {
+            if (versionReads.getAndIncrement() == 0) response("""{"data":{"version":"9.2.1"}}""") else response("{}", 500, "Internal error")
+        }
+        fixture.route("/access/permissions") {
+            if (permissionReads.getAndIncrement() == 0) {
+                response("""{"data":{"/":{"VM.Audit":1}}}""")
+            } else {
+                response("""{"data":{"/":{"VM.Audit":1,"VM.PowerMgmt":1}}}""")
+            }
+        }
+        backgroundScope.launch { accessRepository.access.collect {} }
+
+        val first = accessRepository.access.filterNotNull().first { it.permissions != null }
+        // The next read is five minutes later, which the test's clock skips.
+        val second = accessRepository.access.filterNotNull().first { it.allows(listOf("/"), Privilege.VM_POWER_MGMT) }
+
+        assertFalse(first.allows(listOf("/"), Privilege.VM_POWER_MGMT))
+        assertEquals("9.2.1", second.version?.version, "the version that could not be read again is kept")
     }
 
     @Test
