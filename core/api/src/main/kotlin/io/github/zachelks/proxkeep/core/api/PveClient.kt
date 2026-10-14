@@ -27,6 +27,8 @@ import io.github.zachelks.proxkeep.core.api.model.TaskStatus
 import io.github.zachelks.proxkeep.core.api.model.TaskSummary
 import io.github.zachelks.proxkeep.core.api.model.TicketResponse
 import io.github.zachelks.proxkeep.core.api.model.VersionInfo
+import io.github.zachelks.proxkeep.core.api.vnc.VncConnection
+import io.github.zachelks.proxkeep.core.api.vnc.VncProxyTicket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.DeserializationStrategy
@@ -230,6 +232,26 @@ class PveClient(
             .get()
             .build()
         return ConsoleChannel.connect(http, request, ticket, scope, listener)
+    }
+
+    /**
+     * Opens a virtual machine's display: asks the server for a VNC proxy,
+     * then connects to it through the server's websocket relay. Returns as
+     * soon as the connection is under way; [listener] learns how it goes.
+     *
+     * @throws PveApiException when the server refuses to start the proxy
+     */
+    suspend fun openDesktop(node: String, vmid: Int, listener: VncConnection.Listener): VncConnection {
+        val base = guestPath(node, ResourceKind.Qemu, vmid)
+        // A generated password is stronger than the ticket, of which VNC uses only 8 characters.
+        val form = mapOf("websocket" to "1", "generate-password" to "1")
+        val ticket = call(post(base + "vncproxy", form), VncProxyTicket.serializer())
+        val query = mapOf("port" to ticket.port.toString(), "vncticket" to ticket.ticket)
+        val request = builder(base + "vncwebsocket", query, authenticated = true)
+            .header("Sec-WebSocket-Protocol", "binary")
+            .get()
+            .build()
+        return VncConnection.connect(http, request, ticket.password ?: ticket.ticket, listener)
     }
 
     // --- Tasks -----------------------------------------------------------
