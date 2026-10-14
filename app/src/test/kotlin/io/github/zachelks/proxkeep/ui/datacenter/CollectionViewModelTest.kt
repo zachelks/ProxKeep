@@ -73,6 +73,34 @@ class CollectionViewModelTest {
     }
 
     @Test
+    fun aRuleIsDeletedOnlyIfTheListHasNotChanged(): Unit = runBlocking {
+        fixture.route("/version", """{"data":{"version":"9.0.3"}}""")
+        // Without the schema, a rule's position still carries the list's digest.
+        fixture.route("/pve-docs/api-viewer/apidata.js", "", code = 404)
+        fixture.route(
+            "/cluster/firewall/rules",
+            """{"data":[{"pos":0,"type":"in","action":"ACCEPT","digest":"d1"},{"pos":1,"type":"in","action":"DROP","digest":"d1"}]}""",
+        )
+        fixture.route("/cluster/firewall/rules/1") { request ->
+            writes += "${request.method} ${request.requestUrl?.encodedPath}?${request.requestUrl?.encodedQuery}"
+            response("""{"data":null}""")
+        }
+        val repository = fixture.signedInRepository(scope)
+        val viewModel = CollectionViewModel(repository, SchemaRepository(repository, cacheDir), RefreshSignal(), Collections.get("fw-rules")!!, emptyMap())
+        try {
+            scope.launch { viewModel.items.collect {} }
+            val items = assertIs<Loadable.Loaded<List<CollectionItem>>>(withTimeout(TIMEOUT_MS) { viewModel.items.first { it is Loadable.Loaded } })
+
+            val message = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(TIMEOUT_MS) { viewModel.messages.first() } }
+            viewModel.delete(items.value.single { it.id == "1" })
+            assertEquals(R.string.dc_deleted, message.await().id)
+            assertEquals(listOf("DELETE /api2/json/cluster/firewall/rules/1?digest=d1"), writes)
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
+    }
+
+    @Test
     fun aNewTokensSecretIsShownBeforeTheFormCloses(): Unit = runBlocking {
         fixture.route("/version", """{"data":{"version":"9.0.3"}}""")
         fixture.route(

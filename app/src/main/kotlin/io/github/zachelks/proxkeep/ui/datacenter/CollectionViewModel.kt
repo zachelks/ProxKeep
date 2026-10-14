@@ -79,8 +79,26 @@ class CollectionViewModel(
         if (spec.aclStyle) {
             client.write("PUT", "/access/acl", aclRemoval(item.values))
         } else {
-            client.write("DELETE", spec.item(args, item.id) ?: return@change null, emptyMap())
+            val path = spec.item(args, item.id) ?: return@change null
+            client.write("DELETE", path, digestFor(item))
         }
+    }
+
+    /**
+     * The list's digest, when the item's delete takes one, so the server
+     * refuses the delete if the list changed since it was read. Firewall
+     * rules are addressed by position, so without it a stale list deletes
+     * whichever rule has that position now.
+     */
+    private suspend fun digestFor(item: CollectionItem): Map<String, String> {
+        val digest = item.values[DIGEST] ?: return emptyMap()
+        val takesDigest = try {
+            spec.itemPath?.let { schemas.schema().method(it, "DELETE")?.parameter(DIGEST) } != null
+        } catch (e: IOException) {
+            // Without the schema, rely on what every version does: position-addressed items take a digest.
+            spec.idKey == POSITION_KEY
+        }
+        return if (takesDigest) mapOf(DIGEST to digest) else emptyMap()
     }
 
     fun run(item: CollectionItem, action: ItemAction) = change(action.done) { client ->
@@ -138,6 +156,8 @@ class CollectionViewModel(
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val MESSAGE_BUFFER = 8
         private const val REFRESH_MS = 15_000L
+        private const val DIGEST = "digest"
+        private const val POSITION_KEY = "pos"
 
         fun abilitiesFrom(schema: ApiSchema, spec: CollectionSpec, fallback: CollectionAbilities): CollectionAbilities {
             val createPath = if (spec.createWithId) spec.itemPath else spec.listPath
