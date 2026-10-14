@@ -27,7 +27,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class CollectionViewModelTest {
 
@@ -119,9 +121,9 @@ class CollectionViewModelTest {
             viewModel.edit("comment", "CI runner")
             viewModel.save()
             assertEquals("5f1b-secret", withTimeout(TIMEOUT_MS) { viewModel.secret.filterNotNull().first() })
-            val saved = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(TIMEOUT_MS) { viewModel.saved.first() } }
+            assertFalse(viewModel.saved.value, "the form stays open while the secret is shown")
             viewModel.secretShown()
-            saved.await()
+            assertTrue(viewModel.saved.value)
         } finally {
             viewModel.viewModelScope.cancel()
         }

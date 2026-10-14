@@ -72,7 +72,8 @@ fun SchemaEditScreen(
     val resources = LocalResources.current
     var showAll by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(viewModel) { viewModel.saved.collect { onClose() } }
+    val saved by viewModel.saved.collectAsStateWithLifecycle()
+    if (saved) LaunchedEffect(Unit) { onClose() }
     val secret by viewModel.secret.collectAsStateWithLifecycle()
     secret?.let { value -> SecretDialog(value, onDone = viewModel::secretShown) }
     LaunchedEffect(viewModel) {

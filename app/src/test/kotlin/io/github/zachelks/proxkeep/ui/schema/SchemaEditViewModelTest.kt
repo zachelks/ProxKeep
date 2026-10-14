@@ -10,7 +10,6 @@ import io.github.zachelks.proxkeep.ui.lifecycle.Loadable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -86,9 +85,9 @@ class SchemaEditViewModelTest {
         start(edit)
         viewModel.edit("comments", "")
         viewModel.edit("cidr", "192.0.2.11/24")
-        val saved = async { withTimeout(TIMEOUT_MS) { viewModel.saved.first() } }
         viewModel.save()
-        saved.await()
+        // Saved is state, so waiting for it after the save cannot miss it.
+        withTimeout(TIMEOUT_MS) { viewModel.saved.first { it } }
         assertEquals("PUT" to mapOf("cidr" to "192.0.2.11/24", "delete" to "comments", "digest" to "d9"), writes.single())
     }
 
@@ -99,9 +98,9 @@ class SchemaEditViewModelTest {
         assertEquals(listOf("iface", "type", "autostart", "cidr", "bridge_ports", "comments"), form.fields.map { it.key })
         assertEquals("bridge", form.value("type"))
         viewModel.edit("iface", "vmbr9")
-        val saved = async { withTimeout(TIMEOUT_MS) { viewModel.saved.first() } }
         viewModel.save()
-        saved.await()
+        // Saved is state, so waiting for it after the save cannot miss it.
+        withTimeout(TIMEOUT_MS) { viewModel.saved.first { it } }
         assertEquals("POST" to mapOf("type" to "bridge", "iface" to "vmbr9"), writes.single())
     }
 

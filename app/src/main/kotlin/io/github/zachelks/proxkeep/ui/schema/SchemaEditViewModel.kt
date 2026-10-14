@@ -64,10 +64,14 @@ class SchemaEditViewModel(
     private val _saving = MutableStateFlow(false)
     val saving: StateFlow<Boolean> = _saving.asStateFlow()
 
-    private val _saved = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val _saved = MutableStateFlow(false)
 
-    /** Emits once the change has been saved, so the screen can close. */
-    val saved: SharedFlow<Unit> = _saved.asSharedFlow()
+    /**
+     * Whether the change has been saved, so the screen can close. It is
+     * state, not an event, so a screen that was not collecting at that
+     * moment, for example during a rotation, still sees it.
+     */
+    val saved: StateFlow<Boolean> = _saved.asStateFlow()
 
     private val _secret = MutableStateFlow<String?>(null)
 
@@ -80,7 +84,7 @@ class SchemaEditViewModel(
     /** The person has seen the secret; the screen can close. */
     fun secretShown() {
         _secret.value = null
-        _saved.tryEmit(Unit)
+        _saved.value = true
     }
 
     private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = MESSAGE_BUFFER)
@@ -142,7 +146,7 @@ class SchemaEditViewModel(
                     }
                 }
                 refreshSignal.request()
-                if (returned != null) _secret.value = returned else _saved.emit(Unit)
+                if (returned != null) _secret.value = returned else _saved.value = true
             } catch (e: PveApiException) {
                 if (e.parameterErrors.isNotEmpty()) {
                     _form.update { state ->
