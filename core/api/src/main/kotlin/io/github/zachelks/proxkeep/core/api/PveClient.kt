@@ -231,13 +231,13 @@ class PveClient(
      * The API viewer's data file, which describes every path and parameter
      * of this server's API. Parse it with [ApiSchema.parse].
      *
-     * @throws PveApiException when the server does not publish it
+     * @throws SchemaUnavailableException when the server does not publish it
      */
     suspend fun apiSchemaText(): String {
-        val url = baseUrl.resolve(SCHEMA_PATH) ?: throw PveApiException(404, "No API schema")
+        val url = baseUrl.resolve(SCHEMA_PATH) ?: throw SchemaUnavailableException(0)
         val request = builder(emptyList(), emptyMap(), authenticated = true).url(url).header("Accept", "*/*").get().build()
         val raw = execute(request)
-        if (raw.code !in 200..299) throw PveApiException(raw.code, raw.message.ifBlank { "The server does not publish its API schema" })
+        if (raw.code !in 200..299) throw SchemaUnavailableException(raw.code)
         return raw.body
     }
 

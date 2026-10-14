@@ -17,6 +17,7 @@ import io.github.zachelks.proxkeep.data.KeyChainKeys
 import io.github.zachelks.proxkeep.data.ProfileStore
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SecretBox
+import io.github.zachelks.proxkeep.data.SchemaRepository
 import io.github.zachelks.proxkeep.data.ServerAccessRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.security.AppLock
@@ -77,6 +78,8 @@ class AppContainer(context: Context) {
     val cluster = ClusterRepository(repository, refresh, scope)
 
     val access = ServerAccessRepository(repository, scope)
+
+    val schemas = SchemaRepository(repository, File(context.cacheDir, "api-schema"))
 
     val guestActions = GuestActions(repository, refresh, scope)
 

@@ -136,6 +136,9 @@ class ConfigurationApiTest {
     @Test
     fun aServerWithoutTheViewerSaysSo(): Unit = runBlocking {
         enqueue("", code = 404)
-        assertEquals(404, assertFailsWith<PveApiException> { client.apiSchemaText() }.statusCode)
+        assertEquals(404, assertFailsWith<SchemaUnavailableException> { client.apiSchemaText() }.statusCode)
+        // Not a sign that the session expired.
+        enqueue("", code = 401)
+        assertEquals(401, assertFailsWith<SchemaUnavailableException> { client.apiSchemaText() }.statusCode)
     }
 }
