@@ -22,7 +22,7 @@ Requires JDK 17+ and the Android SDK (API 37 platform). CI uses JDK 21.
 
 CI (`.github/workflows/ci.yml`) runs all of the above on every push. `.github/scripts/report_results.py` repeats test failures, compiler errors and lint findings as GitHub annotations, which can be read through the GitHub API when raw logs can't. The debug APK is uploaded as the `app-debug` artifact.
 
-Cloud sessions have no Android SDK, so CI is the only check for the app module there. `core:api` and the app's Android-free `data` classes can still be compiled and tested with a standalone JVM Gradle build. Nothing has an instrumented test or emulator setup. Behavior on a device and against a real server is checked by hand, which is why every pull request ends with a "How to test" list.
+Cloud sessions have JDK 21 and an Android SDK (`ANDROID_HOME=/opt/android-sdk`, API 37 platform), so all of the commands above run there too. Gradle downloads the build-tools it needs. On a cold cache, Maven Central sometimes answers with HTTP 429. Re-run the build when that happens; Gradle keeps what already downloaded, and `--max-workers=2` makes it less likely. Nothing has an instrumented test or emulator setup. Behavior on a device and against a real server is checked by hand, which is why every pull request ends with a "How to test" list.
 
 ## Modules
 
