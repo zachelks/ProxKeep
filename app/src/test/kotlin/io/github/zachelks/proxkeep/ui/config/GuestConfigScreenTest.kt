@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.waitWithLooper
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.PinnedServer
 import io.github.zachelks.proxkeep.data.RefreshSignal
@@ -89,7 +90,7 @@ class GuestConfigScreenTest {
     fun showsTheHardwareAndChangesTheProcessor() {
         compose.setContent { GuestConfigScreen("lxc/200", onClose = {}, viewModel = viewModel) }
         val cores = context.resources.getQuantityString(R.plurals.hardware_cores_count, 2, 2)
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(cores)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitWithLooper { compose.onAllNodes(hasText(cores)).fetchSemanticsNodes().isNotEmpty() }
 
         compose.onNodeWithText(string(R.string.config_pending_title)).assertExists()
         // The list is longer than the test's screen, so each row is scrolled to before it is looked for.
@@ -101,7 +102,7 @@ class GuestConfigScreenTest {
         compose.onNodeWithText(cores).performClick()
         compose.onNode(hasText("2") and hasSetTextAction()).performTextReplacement("4")
         compose.onNodeWithText(string(R.string.action_save)).performClick()
-        compose.waitUntil(WAIT_MS) { writes.isNotEmpty() }
+        compose.waitWithLooper { writes.isNotEmpty() }
         assertTrue("cores=4" in writes.single())
         assertTrue("digest=d1" in writes.single())
     }
@@ -111,10 +112,6 @@ class GuestConfigScreenTest {
         compose.setContent { GuestConfigScreen("lxc/200", onClose = {}, viewModel = viewModel) }
         compose.onNodeWithText(string(R.string.config_tab_options)).performClick()
         val reason = string(R.string.error_schema_unavailable)
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(reason)).fetchSemanticsNodes().isNotEmpty() }
-    }
-
-    private companion object {
-        const val WAIT_MS = 30_000L
+        compose.waitWithLooper { compose.onAllNodes(hasText(reason)).fetchSemanticsNodes().isNotEmpty() }
     }
 }

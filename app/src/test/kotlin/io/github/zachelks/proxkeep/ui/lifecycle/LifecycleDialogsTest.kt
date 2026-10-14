@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.waitWithLooper
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.GuestLifecycle
@@ -68,7 +69,7 @@ class LifecycleDialogsTest {
     @Test
     fun deletingAsksForTheGuestsIdToBeTyped() {
         compose.setContent { LifecycleDialog(LifecycleMenuItem.Delete, stopped, viewModel) { done++ } }
-        compose.waitUntil(WAIT_MS) { viewModel.guest.value != null }
+        compose.waitWithLooper { viewModel.guest.value != null }
         val confirm = compose.onNode(hasText(context.getString(R.string.action_delete)) and hasAnyAncestor(isDialog()))
 
         confirm.assertIsNotEnabled()
@@ -79,7 +80,7 @@ class LifecycleDialogsTest {
         confirm.performClick()
 
         assertEquals(1, done)
-        compose.waitUntil(WAIT_MS) { fixture.requestedPaths.contains("/nodes/pve1/qemu/100") }
+        compose.waitWithLooper { fixture.requestedPaths.contains("/nodes/pve1/qemu/100") }
     }
 
     @Test
@@ -88,10 +89,5 @@ class LifecycleDialogsTest {
 
         compose.onNode(hasText(context.getString(R.string.delete_needs_stop))).assertExists()
         compose.onNode(hasText(context.getString(R.string.action_delete)) and hasAnyAncestor(isDialog())).assertIsNotEnabled()
-    }
-
-    private companion object {
-        /** Long enough for a busy CI runner, which runs lint and the other modules' tests alongside. */
-        const val WAIT_MS = 30_000L
     }
 }
