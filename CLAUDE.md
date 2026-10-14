@@ -32,7 +32,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 
 - Plain JVM for code without Android types: repositories, view models, `AddServerState`, `Navigator`, `AppLock`. View model tests use `MainDispatcherRule`, which moves the main dispatcher to background threads. Cancel `viewModelScope` in teardown. Don't use the rule in Compose tests: Compose needs the real main thread, which Robolectric provides.
 - Robolectric (`@RunWith(RobolectricTestRunner::class)`) for code that needs the Android framework or the app's resources: `ProfileStore`, `AppSettings`, the console classes, and anything that takes a `Context`.
-- Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`. Under the v2 rule, view model flows that wait on network replies can stall; collect them from a background scope in the test, as `LifecycleDialogsTest` does.
+- Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`. View model coroutines resume on the main looper after each network reply, and the v2 rule's `waitUntil` does not always run the looper once Compose is idle. Wait with `waitWithLooper` (`ComposeWaits.kt`) instead, and collect view model flows from a background scope in the test, as `LifecycleDialogsTest` does. A text field inside a dialog never lets Compose go idle under some `@Config` screen qualifiers, so keep the default size and scroll to rows instead.
 
 `PinnedServer` (`data/TestServers.kt`) is a `MockWebServer` with a pinned self-signed certificate. `enqueue` answers requests in order. `route` answers by path, which suits loaders that poll several endpoints at once. Over HTTPS it speaks HTTP/2, which has no reason phrase, so put an error's text in the body's `message` field, as Proxmox does.
 
@@ -62,7 +62,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - `RefreshSignal.ticks()` paces every loader: at once, every 10 s, and whenever `request()` is called (the refresh button, a finished power action).
 - `ClusterRepository` holds the one `/cluster/resources` call that feeds Overview, Guests, Infrastructure and search.
 - `ServerAccessRepository` holds the server version and the credentials' permissions (`/access/permissions`). Use `ServerAccess.allows(paths, privilege)` to decide whether to offer an action; it allows everything while permissions are unknown, because the server enforces them anyway. `Permissions.guestPaths` includes the guest's pool.
-- `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`. `GuestLifecycle` does the same for snapshots, backups, restores, migrations, clones, templates and deletions, following each task on the node named in its UPID.
+- `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`. `GuestLifecycle` does the same for creation, snapshots, backups, restores, migrations, clones, templates and deletions, following each task on the node named in its UPID.
 - `LifecycleViewModel` serves one guest's Snapshots and Backups screens and its lifecycle dialogs. `availableLifecycleItems` decides what the guest's menu offers.
 
 **Navigation.** Navigation 3 (`ui/AppNavigation.kt`). The back stack is a list of `Route`s, saved across rotation and process death, and changed only through `Navigator`.
@@ -73,6 +73,14 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 **View models.** One per feature: `ShellViewModel` (server menu, refresh, action messages), `ClusterViewModel` (Overview, Infrastructure), `GuestsViewModel` (list, detail, usage history, actions), `TasksViewModel` (list, log follower), `SearchViewModel` (search overlay), `AddServerViewModel` (sign-in flow). Polling and other data logic belong in the view model or a repository, not in composables. Guests and Tasks use Material 3 adaptive list-detail panes; the pane tells the view model what is selected.
 
 **App lock.** `AppLock` holds the timing rules and has no Android dependencies, so it is unit-tested. `ProcessLifecycleOwner` drives it from `ProxKeepApplication`. While the app is locked, `AppRoot` composes only `LockScreen`, so nothing behind the lock fetches or shows data. `MainActivity` is a `FragmentActivity` because `BiometricPrompt` requires one.
+
+**Configuration.**
+- The long tail of settings is rendered from the server's own API schema. `ApiSchema` (core:api `schema/`) reads the API viewer's data file, `/pve-docs/api-viewer/apidata.js`, which the server publishes for its version. `SchemaRepository` downloads it once per server and version into the cache directory. A server without the file throws `SchemaUnavailableException`, which never signs the session out.
+- `PropertyString` reads and writes composite values such as `virtio=BC:…,bridge=vmbr0`, keeping their key order. `check` validates a value against its `ParamSchema` the way the server will.
+- `SchemaForm` is the plain, tested state of a schema-driven form: values, what changed, problems and the server's refusals by key. `SchemaFieldEditor` renders one setting by its type.
+- `GuestConfigViewModel` serves a guest's settings screen. It reads the configuration when the screen opens and after each change, not on a timer, so an open form is never replaced. Every change carries the configuration's digest, so a change made elsewhere meanwhile is refused, not overwritten. Virtual machines apply changes as a task (POST); containers apply them at once (PUT).
+- Hardware is edited by hand (`ui/config/Hardware.kt`, `HardwareDialogs.kt`); `HardwareFormats` covers its property strings without the schema. Options come from the schema, minus the keys `hardwareKeys` lists.
+- The create wizards (`ui/create/`) are hand-designed. `VmDraft` and `CtDraft` check each step and build the creation parameters; they are plain and tested.
 
 **Remote desktop.**
 - `RfbClient` (core:api `vnc/`) speaks the VNC protocol: versions 3.3 to 3.8, no authentication or VNC passwords, and the Raw, CopyRect and ZRLE encodings, with resizes and a client-drawn pointer. `VncConnection` carries it over the server's `vncwebsocket` relay, with the bytes in binary messages; `PveClient.openDesktop` asks for a VNC proxy with a generated password first.
@@ -97,7 +105,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 
 ## Where the code differs from the spec
 
-- The API client is hand-written, not generated from the Proxmox schema.
+- The API client is hand-written, not generated from the Proxmox schema. Schema-driven forms read the schema from the signed-in server at runtime instead, so they match its version.
 - Termux's terminal libraries are GPLv3 only, not Apache 2.0 as the spec says. See the license note above.
 - The remote desktop uses a VNC client written in Kotlin in core:api, not LibVNCClient. It speaks the protocol over the websocket directly, so the spec's local socket bridge and the NDK build are not needed.
 
@@ -117,4 +125,6 @@ VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 4, Guest lifecycle.** Done in code: snapshots, backup now, restore, migrate, clone, convert to template and delete. Restoring as a new guest and backup jobs come with milestone 6. The first public release follows this milestone; it needs testing against real servers first.
 
-**Milestones 5 to 9.** Not started.
+**Milestone 5, Configuration.** Done in code: schema-driven options, hand-designed hardware editing (processor, memory, disks, CD and DVD drives, network devices), cloud-init settings, pending changes, and wizards for new virtual machines and containers. Not yet confirmed against a real server. Moving disks between storages is not done.
+
+**Milestones 6 to 9.** Not started.
