@@ -21,6 +21,7 @@ import io.github.zachelks.proxkeep.ui.create.CreateGuestScreen
 import io.github.zachelks.proxkeep.ui.nodes.NodeScreen
 import io.github.zachelks.proxkeep.ui.schema.SchemaEditRequest
 import io.github.zachelks.proxkeep.ui.schema.SchemaEditScreen
+import io.github.zachelks.proxkeep.ui.storage.StorageScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.BackupsScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.SnapshotsScreen
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
@@ -73,6 +74,9 @@ fun AppNavigation() {
                     onConsoleOpened = { navigator.open(Route.Terminal) },
                     onOpenRoute = navigator::open,
                 )
+            }
+            entry<Route.Storage> { route ->
+                StorageScreen(route.node, route.storage, onClose = { navigator.close(route) }, onOpenRoute = navigator::open)
             }
             entry<Route.SchemaEdit> { route ->
                 SchemaEditScreen(

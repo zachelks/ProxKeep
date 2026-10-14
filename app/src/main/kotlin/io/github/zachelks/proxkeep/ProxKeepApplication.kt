@@ -19,6 +19,7 @@ import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SecretBox
 import io.github.zachelks.proxkeep.data.SchemaRepository
 import io.github.zachelks.proxkeep.data.ServerAccessRepository
+import io.github.zachelks.proxkeep.data.StorageTransfers
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.security.AppLock
 import io.github.zachelks.proxkeep.security.Authenticator
@@ -84,6 +85,8 @@ class AppContainer(context: Context) {
     val guestActions = GuestActions(repository, refresh, scope)
 
     val guestLifecycle = GuestLifecycle(repository, refresh, scope)
+
+    val transfers = StorageTransfers(repository, refresh, scope)
 
     val consoles = ConsoleManager(context.applicationContext, repository, scope)
 

@@ -10,39 +10,43 @@ import io.github.zachelks.proxkeep.core.api.console.ConsoleChannel
 import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
 import io.github.zachelks.proxkeep.core.api.console.TermProxyTicket
 import io.github.zachelks.proxkeep.core.api.json.PveJson
+import io.github.zachelks.proxkeep.core.api.model.AgentResult
 import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
+import io.github.zachelks.proxkeep.core.api.model.ApplianceTemplate
 import io.github.zachelks.proxkeep.core.api.model.BackupCompression
 import io.github.zachelks.proxkeep.core.api.model.BackupMode
-import io.github.zachelks.proxkeep.core.api.model.MigrationCheck
-import io.github.zachelks.proxkeep.core.api.model.NodeNetwork
-import io.github.zachelks.proxkeep.core.api.model.NodeCertificate
-import io.github.zachelks.proxkeep.core.api.model.NodeDns
-import io.github.zachelks.proxkeep.core.api.model.NodeService
-import io.github.zachelks.proxkeep.core.api.model.NodeStatus
-import io.github.zachelks.proxkeep.core.api.model.NodeTime
-import io.github.zachelks.proxkeep.core.api.model.PackageUpdate
-import io.github.zachelks.proxkeep.core.api.model.PhysicalDisk
-import io.github.zachelks.proxkeep.core.api.model.ServiceAction
-import io.github.zachelks.proxkeep.core.api.model.SmartData
-import io.github.zachelks.proxkeep.core.api.model.NodeStorage
-import io.github.zachelks.proxkeep.core.api.model.PendingChange
-import io.github.zachelks.proxkeep.core.api.model.Snapshot
-import io.github.zachelks.proxkeep.core.api.model.StorageVolume
-import io.github.zachelks.proxkeep.core.api.model.AgentResult
+import io.github.zachelks.proxkeep.core.api.model.ChecksumAlgorithm
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.GuestStatus
+import io.github.zachelks.proxkeep.core.api.model.MigrationCheck
+import io.github.zachelks.proxkeep.core.api.model.NodeCertificate
+import io.github.zachelks.proxkeep.core.api.model.NodeDns
+import io.github.zachelks.proxkeep.core.api.model.NodeNetwork
+import io.github.zachelks.proxkeep.core.api.model.NodeService
+import io.github.zachelks.proxkeep.core.api.model.NodeStatus
+import io.github.zachelks.proxkeep.core.api.model.NodeStorage
+import io.github.zachelks.proxkeep.core.api.model.NodeTime
+import io.github.zachelks.proxkeep.core.api.model.PackageUpdate
+import io.github.zachelks.proxkeep.core.api.model.PendingChange
 import io.github.zachelks.proxkeep.core.api.model.Permissions
+import io.github.zachelks.proxkeep.core.api.model.PhysicalDisk
 import io.github.zachelks.proxkeep.core.api.model.Realm
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.core.api.model.RrdPoint
 import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
+import io.github.zachelks.proxkeep.core.api.model.ServiceAction
+import io.github.zachelks.proxkeep.core.api.model.SmartData
+import io.github.zachelks.proxkeep.core.api.model.Snapshot
+import io.github.zachelks.proxkeep.core.api.model.StorageVolume
 import io.github.zachelks.proxkeep.core.api.model.TaskLogLine
 import io.github.zachelks.proxkeep.core.api.model.TaskStatus
 import io.github.zachelks.proxkeep.core.api.model.TaskSummary
 import io.github.zachelks.proxkeep.core.api.model.TicketResponse
+import io.github.zachelks.proxkeep.core.api.model.UploadProgress
+import io.github.zachelks.proxkeep.core.api.model.UrlMetadata
 import io.github.zachelks.proxkeep.core.api.model.VersionInfo
 import io.github.zachelks.proxkeep.core.api.vnc.VncConnection
 import io.github.zachelks.proxkeep.core.api.vnc.VncProxyTicket
@@ -55,15 +59,22 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.FormBody
 import okhttp3.HttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.Response
+import okio.BufferedSink
 import java.io.IOException
+import java.io.InputStream
 import java.net.URLDecoder
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -357,6 +368,103 @@ class PveClient(
     /** The newest [lastEntries] lines of the node's system journal, oldest first. */
     suspend fun journal(node: String, lastEntries: Int = 500): List<String> =
         call(get(listOf("nodes", node, "journal"), query = mapOf("lastentries" to lastEntries.toString())), ListSerializer(String.serializer()))
+
+    // --- Storage ---------------------------------------------------------
+
+    suspend fun storageStatus(node: String, storage: String): NodeStorage {
+        val json = call(get(listOf("nodes", node, "storage", storage, "status")), JsonObject.serializer())
+        // The status leaves out the storage's own name.
+        return PveJson.decodeFromJsonElement(NodeStorage.serializer(), JsonObject(json + ("storage" to JsonPrimitive(storage))))
+    }
+
+    /** Deletes a volume, such as an ISO image or a backup. Returns the task's UPID when the deletion runs as one. */
+    suspend fun deleteVolume(node: String, storage: String, volid: String): String? =
+        callForTask(delete(listOf("nodes", node, "storage", storage, "content", volid)))
+
+    /**
+     * Uploads a file to a storage: an ISO image, a container template or a
+     * disk image to import. The server copies it into place as a task.
+     *
+     * @param content `iso`, `vztmpl` or `import`
+     * @param open opens the file's contents; it is read once, as it is sent
+     * @return the task's UPID
+     */
+    suspend fun upload(
+        node: String,
+        storage: String,
+        content: String,
+        fileName: String,
+        length: Long,
+        open: () -> InputStream,
+        progress: UploadProgress = UploadProgress { _, _ -> },
+    ): String? {
+        val file = object : RequestBody() {
+            override fun contentType() = "application/octet-stream".toMediaType()
+
+            override fun contentLength() = length
+
+            override fun writeTo(sink: BufferedSink) {
+                open().use { input ->
+                    val buffer = ByteArray(UPLOAD_CHUNK)
+                    var sent = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        sink.write(buffer, 0, read)
+                        sent += read
+                        progress.onProgress(sent, length)
+                    }
+                }
+            }
+        }
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("content", content)
+            .addFormDataPart("filename", fileName, file)
+            .build()
+        val request = builder(listOf("nodes", node, "storage", storage, "upload"), emptyMap(), authenticated = true).post(body)
+        (credentials as? TicketCredentials)?.csrfToken?.let { request.header("CSRFPreventionToken", it) }
+        // Large files take longer than any read timeout to send.
+        val call = http.newBuilder().writeTimeout(0, TimeUnit.MILLISECONDS).readTimeout(UPLOAD_READ_TIMEOUT_S, TimeUnit.SECONDS).build()
+            .newCall(request.build())
+        return taskFrom(call.await())
+    }
+
+    /** What a download from [url] would fetch, so its name and size can be shown first. */
+    suspend fun queryUrl(node: String, url: String, verifyCertificates: Boolean = true): UrlMetadata {
+        val query = mapOf("url" to url, "verify-certificates" to if (verifyCertificates) "1" else "0")
+        return call(get(listOf("nodes", node, "query-url-metadata"), query = query), UrlMetadata.serializer())
+    }
+
+    /**
+     * Has the node download a file from [url] onto a storage. Returns the task's UPID.
+     *
+     * @param content `iso`, `vztmpl` or `import`
+     */
+    suspend fun downloadUrl(
+        node: String,
+        storage: String,
+        content: String,
+        url: String,
+        fileName: String,
+        checksum: Pair<ChecksumAlgorithm, String>? = null,
+        verifyCertificates: Boolean = true,
+    ): String? {
+        val form = linkedMapOf("content" to content, "url" to url, "filename" to fileName, "verify-certificates" to if (verifyCertificates) "1" else "0")
+        checksum?.let { (algorithm, value) ->
+            form["checksum-algorithm"] = algorithm.apiName
+            form["checksum"] = value
+        }
+        return callForTask(post(listOf("nodes", node, "storage", storage, "download-url"), form))
+    }
+
+    /** Container templates in the Proxmox catalog. */
+    suspend fun applianceTemplates(node: String): List<ApplianceTemplate> =
+        call(get(listOf("nodes", node, "aplinfo")), ListSerializer(ApplianceTemplate.serializer()))
+
+    /** Downloads a catalog template onto a storage. Returns the task's UPID. */
+    suspend fun downloadTemplate(node: String, storage: String, template: String): String? =
+        callForTask(post(listOf("nodes", node, "aplinfo"), mapOf("storage" to storage, "template" to template)))
 
     // --- Any path --------------------------------------------------------
 
@@ -663,8 +771,9 @@ class PveClient(
         decode(execute(request), deserializer)
 
     /** For calls that start a task: its UPID, or null when the server finished the work at once. */
-    private suspend fun callForTask(request: Request): String? {
-        val raw = execute(request)
+    private suspend fun callForTask(request: Request): String? = taskFrom(execute(request))
+
+    private fun taskFrom(raw: RawResponse): String? {
         if (raw.code in 200..299) {
             val data = try {
                 PveJson.decodeFromString(ENVELOPE, raw.body).data
@@ -737,6 +846,10 @@ class PveClient(
         const val TICKET_COOKIE = "PVEAuthCookie"
 
         const val MAX_DNS_SERVERS = 3
+        const val UPLOAD_CHUNK = 64 * 1024
+
+        /** After the last byte, the server stores the file before it answers. */
+        const val UPLOAD_READ_TIMEOUT_S = 300L
 
         /** Relative to the API root, `/api2/json/`. */
         const val SCHEMA_PATH = "../../pve-docs/api-viewer/apidata.js"

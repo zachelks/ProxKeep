@@ -53,6 +53,10 @@ sealed interface Route {
     @Serializable
     data object CreateContainer : Route
 
+    /** One storage on one node. */
+    @Serializable
+    data class Storage(val node: String, val storage: String) : Route
+
     /** One node's management screen. */
     @Serializable
     data class Node(val node: String) : Route

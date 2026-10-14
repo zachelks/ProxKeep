@@ -92,4 +92,6 @@ object Privilege {
     const val VM_CONFIG_HWTYPE = "VM.Config.HWType"
     const val VM_CONFIG_CLOUDINIT = "VM.Config.Cloudinit"
     const val DATASTORE_ALLOCATE_SPACE = "Datastore.AllocateSpace"
+    const val DATASTORE_ALLOCATE_TEMPLATE = "Datastore.AllocateTemplate"
+    const val DATASTORE_ALLOCATE = "Datastore.Allocate"
 }

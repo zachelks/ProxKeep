@@ -1,6 +1,7 @@
 package io.github.zachelks.proxkeep.ui.cluster
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
@@ -19,6 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
@@ -35,7 +41,6 @@ import io.github.zachelks.proxkeep.core.api.model.VersionInfo
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.ServerProfile
 import io.github.zachelks.proxkeep.ui.appContainer
-import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.components.CenteredProgress
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
@@ -43,6 +48,7 @@ import io.github.zachelks.proxkeep.ui.components.UsageBar
 import io.github.zachelks.proxkeep.ui.format.formatBytes
 import io.github.zachelks.proxkeep.ui.format.formatUptime
 import io.github.zachelks.proxkeep.ui.format.usageFraction
+import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.text
 import io.github.zachelks.proxkeep.ui.toUiMessage
 
@@ -242,6 +248,9 @@ fun InfrastructureRoute(onConsoleOpened: () -> Unit, onOpenRoute: (Route) -> Uni
                 onConsoleOpened()
             },
             onOpenNode = { node -> onOpenRoute(Route.Node(node)) },
+            onOpenStorage = { node, storage -> onOpenRoute(Route.Storage(node, storage)) },
+            canAddStorage = access?.allows(listOf("/storage"), Privilege.DATASTORE_ALLOCATE) ?: true,
+            onAddStorage = { type, title -> onOpenRoute(Route.SchemaEdit(title, "/storage", "/storage", "POST", presets = mapOf("type" to type))) },
         )
     }
 }
@@ -253,8 +262,13 @@ fun InfrastructureScreen(
     onOpenShell: (node: String) -> Unit,
     modifier: Modifier = Modifier,
     onOpenNode: (node: String) -> Unit = {},
+    onOpenStorage: (node: String, storage: String) -> Unit = { _, _ -> },
+    canAddStorage: Boolean = false,
+    onAddStorage: (type: String, title: String) -> Unit = { _, _ -> },
 ) {
     val nodes = state.resources.filter { it.kind == ResourceKind.Node }.sortedBy { it.node }
+    var addMenu by remember { mutableStateOf(false) }
+    val addTitle = stringResource(R.string.storage_add_title)
     val storages = state.resources
         .filter { it.kind == ResourceKind.Storage }
         .sortedWith(compareBy({ it.storage }, { it.node }))
@@ -293,7 +307,24 @@ fun InfrastructureScreen(
             }
         }
 
-        item(key = "storage-title") { SectionTitle(stringResource(R.string.section_storage)) }
+        item(key = "storage-title") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) { SectionTitle(stringResource(R.string.section_storage)) }
+                if (canAddStorage) {
+                    Box {
+                        TextButton(onClick = { addMenu = true }) { Text(stringResource(R.string.action_add_storage)) }
+                        DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                            STORAGE_TYPES.forEach { type ->
+                                DropdownMenuItem(text = { Text(type) }, onClick = {
+                                    addMenu = false
+                                    onAddStorage(type, "$addTitle: $type")
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (storages.isEmpty()) {
             item(key = "no-storage") {
                 Text(
@@ -303,14 +334,20 @@ fun InfrastructureScreen(
                 )
             }
         }
-        items(storages, key = { it.id }) { storage -> StorageCard(storage) }
+        items(storages, key = { it.id }) { storage ->
+            StorageCard(storage, onClick = {
+                val node = storage.node
+                val name = storage.storage
+                if (node != null && name != null) onOpenStorage(node, name)
+            })
+        }
     }
 }
 
 @Composable
-private fun StorageCard(storage: ClusterResource) {
+private fun StorageCard(storage: ClusterResource, onClick: () -> Unit) {
     val status = storage.statusText()
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -337,3 +374,6 @@ private fun StorageCard(storage: ClusterResource) {
         }
     }
 }
+
+/** Storage types a datacenter can add, as the API names them. */
+private val STORAGE_TYPES = listOf("dir", "nfs", "cifs", "pbs", "lvm", "lvmthin", "zfspool", "zfs", "btrfs", "cephfs", "rbd", "iscsi", "esxi")
