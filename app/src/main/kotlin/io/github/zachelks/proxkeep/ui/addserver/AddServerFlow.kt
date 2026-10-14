@@ -106,8 +106,8 @@ fun AddServerFlow(state: AddServerState, onClose: () -> Unit) {
                     clientCertAlias = state.clientCertAlias,
                     onTicket = state::completeWebSignIn,
                     onPageLost = state::webPageLost,
-                    modifier = Modifier.fillMaxSize(),
                     cookieName = state.product.cookieName,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
             return@Scaffold

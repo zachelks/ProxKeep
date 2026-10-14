@@ -3,6 +3,7 @@ package io.github.zachelks.proxkeep.ui.manager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.Upid
 import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.pdm.PdmResource
@@ -150,10 +151,9 @@ class ManagerViewModel(
         _busy.update { it + guest.id }
         viewModelScope.launch {
             try {
-                val upid = servers.request { it.remoteGuestAction(remote, kind, vmid, action) }
-                if (upid != null) {
-                    val node = upid.substringAfter('!').split(':').getOrNull(1).orEmpty()
-                    val status = servers.request { it.awaitTask(node, upid, pollIntervalMs = POLL_MS) }
+                val task = servers.request { it.remoteGuestAction(remote, kind, vmid, action) }?.let(Upid::parse)
+                if (task != null) {
+                    val status = servers.request { it.awaitTask(task.node, task.text, pollIntervalMs = POLL_MS) }
                     if (!status.succeeded) {
                         _messages.emit(UiMessage(R.string.pdm_action_failed, status.exitstatus))
                         return@launch

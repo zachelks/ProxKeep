@@ -18,9 +18,6 @@ data class TicketCredentials(
     override fun toString(): String = "TicketCredentials(username=$username)"
 
     companion object {
-        /** The name of the cookie the web interface keeps its ticket in. */
-        const val COOKIE_NAME = "PVEAuthCookie"
-
         private val TICKET_PREFIXES = setOf("PVE", "PBS", "PDM")
 
         /**

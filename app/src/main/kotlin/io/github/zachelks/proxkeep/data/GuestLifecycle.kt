@@ -2,6 +2,7 @@ package io.github.zachelks.proxkeep.data
 
 import io.github.zachelks.proxkeep.core.api.PveApiException
 import io.github.zachelks.proxkeep.core.api.PveClient
+import io.github.zachelks.proxkeep.core.api.Upid
 import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
@@ -81,9 +82,9 @@ class GuestLifecycle(
         scope.launch {
             try {
                 val outcome = servers.request { client ->
-                    val upid = start(client, guest) ?: return@request null
                     // The task runs on the node in its ID, which for a migration is the source.
-                    client.awaitTask(upidNode(upid) ?: node, upid, pollIntervalMs = POLL_MS)
+                    val task = start(client, guest)?.let(Upid::parse) ?: return@request null
+                    client.awaitTask(task.node, task.text, pollIntervalMs = POLL_MS)
                 }
                 val succeeded = outcome?.succeeded ?: true
                 _events.emit(LifecycleEvent(operation, guestName, succeeded, outcome?.exitstatus.takeUnless { succeeded }))
@@ -139,8 +140,5 @@ class GuestLifecycle(
 
         private const val EVENT_BUFFER = 16
         private const val POLL_MS = 2_000L
-
-        /** The node a task runs on, from `UPID:node:...`. */
-        private fun upidNode(upid: String): String? = upid.split(':').getOrNull(1)?.takeIf { it.isNotEmpty() }
     }
 }

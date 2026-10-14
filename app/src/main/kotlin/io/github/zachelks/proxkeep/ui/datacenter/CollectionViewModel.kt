@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.PveClient
+import io.github.zachelks.proxkeep.core.api.Upid
 import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.schema.ApiSchema
 import io.github.zachelks.proxkeep.data.RefreshSignal
@@ -91,10 +92,10 @@ class CollectionViewModel(
         _busy.value = true
         viewModelScope.launch {
             try {
-                val upid = servers.request { block(it) }
-                val node = upid?.split(':')?.getOrNull(1)?.takeIf { it.isNotEmpty() }
-                if (upid != null && node != null) {
-                    val status = servers.request { it.awaitTask(node, upid) }
+                // Some calls answer with something other than a task, such as a new object's ID.
+                val task = servers.request { block(it) }?.let(Upid::parse)
+                if (task != null) {
+                    val status = servers.request { it.awaitTask(task.node, task.text) }
                     if (!status.succeeded) {
                         _messages.emit(UiMessage(R.string.dc_failed, status.exitstatus))
                         return@launch

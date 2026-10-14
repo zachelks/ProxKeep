@@ -5,6 +5,7 @@ import io.github.zachelks.proxkeep.core.api.auth.Credentials
 import io.github.zachelks.proxkeep.core.api.auth.LoginResult
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.auth.TfaChallenge
+import io.github.zachelks.proxkeep.core.api.auth.TicketCookie
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.console.ConsoleChannel
 import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
@@ -75,7 +76,6 @@ import okhttp3.Response
 import okio.BufferedSink
 import java.io.IOException
 import java.io.InputStream
-import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -146,7 +146,7 @@ class PveClient(
         val raw = execute(post(listOf("access", "ticket"), form, authenticated = false))
         val response = decode(raw, TicketResponse.serializer())
         val ticket = response.ticket
-            ?: ticketFromCookies(raw.setCookies, product.cookieName)
+            ?: TicketCookie.fromSetCookies(raw.setCookies, product.cookieName)
             ?: throw PveApiException(raw.code, "The server did not return a ticket")
         val name = response.username ?: userId
         val challenge = TfaChallenge.fromTicket(ticket)
@@ -778,10 +778,10 @@ class PveClient(
 
     /**
      * The path of a task. A Datacenter Manager relays a remote's tasks under
-     * the remote, whose name comes before the `!` of the task's ID.
+     * the remote, which [Upid] reads from the task's ID.
      */
     private fun taskPath(node: String, upid: String): List<String> {
-        val remote = upid.substringBefore('!', "").takeIf { it.isNotEmpty() && product == Product.Pdm }
+        val remote = Upid.parse(upid)?.remote?.takeIf { product == Product.Pdm }
         return if (remote != null) listOf("pve", "remotes", remote, "tasks", upid) else listOf("nodes", node, "tasks", upid)
     }
 
@@ -930,24 +930,6 @@ class PveClient(
         /** After the last byte, the server stores the file before it answers. */
         const val UPLOAD_READ_TIMEOUT_S = 300L
         val ENVELOPE = ApiEnvelope.serializer(JsonElement.serializer())
-
-        /** Fallback for servers that deliver the ticket only as a cookie. */
-        fun ticketFromCookies(setCookies: List<String>, cookieName: String): String? {
-            for (header in setCookies) {
-                val pair = header.substringBefore(';').trim()
-                val name = pair.substringBefore('=')
-                if (name == cookieName || name == "__Host-$cookieName") {
-                    val value = pair.substringAfter('=', missingDelimiterValue = "")
-                    if (value.isEmpty()) continue
-                    return try {
-                        URLDecoder.decode(value.replace("+", "%2B"), "UTF-8")
-                    } catch (ignored: IllegalArgumentException) {
-                        value
-                    }
-                }
-            }
-            return null
-        }
     }
 }
 

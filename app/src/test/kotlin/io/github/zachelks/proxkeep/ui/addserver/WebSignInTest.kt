@@ -32,15 +32,21 @@ class WebSignInTest {
     fun theTicketIsTakenFromTheCookieOnceThePageHasSignedIn() {
         assertEquals(
             "PVE:alice@oidc:6712F3A1::c2ln",
-            ticketFromCookies("lang=en; PVEAuthCookie=PVE%3Aalice%40oidc%3A6712F3A1%3A%3Ac2ln; other=1"),
+            ticketFromCookies("lang=en; PVEAuthCookie=PVE%3Aalice%40oidc%3A6712F3A1%3A%3Ac2ln; other=1", "PVEAuthCookie"),
         )
         assertEquals(
             "PBS:backup@pbs:6712F3A1::c2ln",
             ticketFromCookies("PVEAuthCookie=PVE%3Aother%40pam%3A1%3A%3Ax; PBSAuthCookie=PBS%3Abackup%40pbs%3A6712F3A1%3A%3Ac2ln", "PBSAuthCookie"),
             "a Backup Server's page keeps its ticket in its own cookie",
         )
-        assertNull(ticketFromCookies(null))
-        assertNull(ticketFromCookies("lang=en"))
-        assertNull(ticketFromCookies("PVEAuthCookie=PVE%3A!tfa!%7B%7D%3A6712F3A1%3A%3Ac2ln"), "a challenge is not a session")
+        assertEquals(
+            "PDM:admin@pdm:6712F3A1::c2ln",
+            ticketFromCookies("__Host-PDMAuthCookie=PDM%3Aadmin%40pdm%3A6712F3A1%3A%3Ac2ln", "PDMAuthCookie"),
+            "newer servers name the cookie with the __Host- prefix",
+        )
+        assertNull(ticketFromCookies(null, "PVEAuthCookie"))
+        assertNull(ticketFromCookies("lang=en", "PVEAuthCookie"))
+        assertNull(ticketFromCookies("PVEAuthCookie=PVE%3A!tfa!%7B%7D%3A6712F3A1%3A%3Ac2ln", "PVEAuthCookie"), "a challenge is not a session")
+        assertNull(ticketFromCookies("PVEAuthCookie=%zz", "PVEAuthCookie"), "a damaged cookie is not a session, and does not crash")
     }
 }

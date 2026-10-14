@@ -106,6 +106,16 @@ class DatacenterManagerApiTest {
     }
 
     @Test
+    fun theManagersOwnTaskStartedByATokenIsReadOnItsNode(): Unit = runBlocking {
+        // The `!` in the token's user ID does not name a remote.
+        val upid = "UPID:pdm:00001234:0000ABCD:6712F3A1:remote-add::admin@pdm!app:"
+        enqueue("""{"data":{"status":"stopped","exitstatus":"OK"}}""")
+        assertTrue(client.taskStatus("localhost", upid).succeeded)
+        assertEquals(listOf("api2", "json", "nodes", "localhost", "tasks", upid, "status"), server.takeRequest().requestUrl!!.pathSegments)
+        assertNull(remoteOfTask(upid))
+    }
+
+    @Test
     fun theManagersTasksIncludeItsRemotes(): Unit = runBlocking {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.requestUrl!!.encodedPath) {

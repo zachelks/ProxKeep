@@ -22,11 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
+import io.github.zachelks.proxkeep.core.api.auth.TicketCookie
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.tls.Fingerprints
 import kotlinx.coroutines.delay
 import java.io.ByteArrayInputStream
-import java.net.URLDecoder
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
@@ -43,7 +43,7 @@ import kotlin.concurrent.thread
  * @param pinnedFingerprint the certificate the server may present when the platform does not trust it
  * @param clientCertAlias the KeyChain certificate to present when the server or its proxy asks for one
  * @param onPageLost called if the page stops working, for example because its process ran out of memory
- * @param cookieName the cookie the product's login page keeps its ticket in
+ * @param cookieName the cookie the product's login page keeps its ticket in, from [io.github.zachelks.proxkeep.core.api.Product.cookieName]
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -53,8 +53,8 @@ fun WebSignInPage(
     clientCertAlias: String?,
     onTicket: (String) -> Unit,
     onPageLost: () -> Unit,
+    cookieName: String,
     modifier: Modifier = Modifier,
-    cookieName: String = TicketCredentials.COOKIE_NAME,
 ) {
     val deliver by rememberUpdatedState(onTicket)
     val lost by rememberUpdatedState(onPageLost)
@@ -154,13 +154,11 @@ private fun SslCertificate.toX509(): X509Certificate? {
     }
 }
 
-/** The usable ticket in a `Cookie` header value, or null if the page has not signed in yet. */
-internal fun ticketFromCookies(cookies: String?, cookieName: String = TicketCredentials.COOKIE_NAME): String? = cookies
-    ?.split(';')
-    ?.map { it.trim() }
-    ?.firstOrNull { it.startsWith("$cookieName=") }
-    ?.substringAfter('=')
-    ?.let { URLDecoder.decode(it, "UTF-8") }
-    ?.takeIf { TicketCredentials.usernameFromTicket(it) != null }
+/**
+ * The usable ticket in a `Cookie` header value, or null if the page has not
+ * signed in yet. A second-factor challenge in the cookie is not usable.
+ */
+internal fun ticketFromCookies(cookies: String?, cookieName: String): String? =
+    TicketCookie.fromCookieHeader(cookies, cookieName)?.takeIf { TicketCredentials.usernameFromTicket(it) != null }
 
 private const val COOKIE_POLL_MS = 500L

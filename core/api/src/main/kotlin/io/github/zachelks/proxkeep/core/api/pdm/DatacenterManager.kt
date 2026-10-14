@@ -1,6 +1,7 @@
 package io.github.zachelks.proxkeep.core.api.pdm
 
 import io.github.zachelks.proxkeep.core.api.PveClient
+import io.github.zachelks.proxkeep.core.api.Upid
 import io.github.zachelks.proxkeep.core.api.encodePathValue
 import io.github.zachelks.proxkeep.core.api.json.LenientBooleanSerializer
 import io.github.zachelks.proxkeep.core.api.json.LenientDoubleSerializer
@@ -129,4 +130,4 @@ suspend fun PveClient.remoteGuestAction(remote: String, kind: ResourceKind, vmid
 }
 
 /** The remote a task ran on, for a task ID of the form `remote!UPID:…`; null for the manager's own tasks. */
-fun remoteOfTask(upid: String): String? = upid.substringBefore('!', "").takeIf { it.isNotEmpty() }
+fun remoteOfTask(upid: String): String? = Upid.parse(upid)?.remote

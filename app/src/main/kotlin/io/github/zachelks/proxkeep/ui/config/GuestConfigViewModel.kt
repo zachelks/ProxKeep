@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.PveApiException
+import io.github.zachelks.proxkeep.core.api.Upid
 import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
@@ -199,13 +200,13 @@ class GuestConfigViewModel(
     fun resize(disk: String, addGiB: Int) {
         val settings = (_settings.value as? Loadable.Loaded)?.value ?: return
         if (addGiB <= 0) return
-        run(settings) { servers.request { it.resizeDisk(settings.node, settings.kind, settings.vmid, disk, "+${addGiB}G") } }
+        run { servers.request { it.resizeDisk(settings.node, settings.kind, settings.vmid, disk, "+${addGiB}G") } }
     }
 
     /** Writes the cloud-init drive again, so changed settings reach the guest at its next start. */
     fun regenerateCloudInit() {
         val settings = (_settings.value as? Loadable.Loaded)?.value ?: return
-        run(settings) {
+        run {
             servers.request { it.regenerateCloudInit(settings.node, settings.vmid) }
             null
         }
@@ -213,21 +214,20 @@ class GuestConfigViewModel(
 
     private fun apply(set: Map<String, String>, delete: List<String>, onSaved: () -> Unit) {
         val settings = (_settings.value as? Loadable.Loaded)?.value ?: return
-        run(settings, onSaved) {
+        run(onSaved) {
             servers.request { it.updateConfig(settings.node, settings.kind, settings.vmid, set, delete, settings.config.digest) }
         }
     }
 
     /** Runs a change that may start a task, follows the task, and reads the configuration again. */
-    private fun run(settings: GuestSettings, onSaved: () -> Unit = {}, start: suspend () -> String?) {
+    private fun run(onSaved: () -> Unit = {}, start: suspend () -> String?) {
         if (_saving.value) return
         _saving.value = true
         viewModelScope.launch {
             try {
-                val upid = start()
-                if (upid != null) {
-                    val node = upid.split(':').getOrNull(1)?.takeIf { it.isNotEmpty() } ?: settings.node
-                    val status = servers.request { it.awaitTask(node, upid, pollIntervalMs = POLL_MS) }
+                val task = start()?.let(Upid::parse)
+                if (task != null) {
+                    val status = servers.request { it.awaitTask(task.node, task.text, pollIntervalMs = POLL_MS) }
                     if (!status.succeeded) {
                         _messages.emit(UiMessage(R.string.config_save_failed, status.exitstatus))
                         return@launch

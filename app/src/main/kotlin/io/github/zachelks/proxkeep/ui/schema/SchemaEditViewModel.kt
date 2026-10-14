@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.PveApiException
+import io.github.zachelks.proxkeep.core.api.Upid
 import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.schema.ApiMethod
 import io.github.zachelks.proxkeep.data.RefreshSignal
@@ -131,16 +132,13 @@ class SchemaEditViewModel(
         viewModelScope.launch {
             try {
                 val data = servers.request { it.writeForData(request.method, request.path, parameters) }
-                val upid = (data as? JsonPrimitive)?.content?.takeIf { it.startsWith("UPID:") }
+                val task = (data as? JsonPrimitive)?.content?.let(Upid::parse)
                 val returned = ((data as? JsonObject)?.get("value") as? JsonPrimitive)?.content
-                if (upid != null) {
-                    val node = upid.split(':').getOrNull(1)?.takeIf { it.isNotEmpty() }
-                    if (node != null) {
-                        val status = servers.request { it.awaitTask(node, upid) }
-                        if (!status.succeeded) {
-                            _messages.emit(UiMessage(R.string.config_save_failed, status.exitstatus))
-                            return@launch
-                        }
+                if (task != null) {
+                    val status = servers.request { it.awaitTask(task.node, task.text) }
+                    if (!status.succeeded) {
+                        _messages.emit(UiMessage(R.string.config_save_failed, status.exitstatus))
+                        return@launch
                     }
                 }
                 refreshSignal.request()
