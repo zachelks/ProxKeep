@@ -14,6 +14,7 @@ import io.github.zachelks.proxkeep.core.api.model.AgentResult
 import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
 import io.github.zachelks.proxkeep.core.api.model.ApplianceTemplate
 import io.github.zachelks.proxkeep.core.api.model.BackupCompression
+import io.github.zachelks.proxkeep.core.api.model.BackupJob
 import io.github.zachelks.proxkeep.core.api.model.BackupMode
 import io.github.zachelks.proxkeep.core.api.model.ChecksumAlgorithm
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
@@ -466,6 +467,20 @@ class PveClient(
     suspend fun downloadTemplate(node: String, storage: String, template: String): String? =
         callForTask(post(listOf("nodes", node, "aplinfo"), mapOf("storage" to storage, "template" to template)))
 
+    // --- Backup jobs -----------------------------------------------------
+
+    /** The datacenter's scheduled backup jobs. */
+    suspend fun backupJobs(): List<BackupJob> =
+        call(get(listOf("cluster", "backup")), ListSerializer(JsonObject.serializer())).mapNotNull(BackupJob::fromJson).sortedBy { it.id }
+
+    /**
+     * Starts a backup on [node] with a job's settings. Returns the task's UPID.
+     *
+     * @param parameters as from [BackupJob.runParameters]
+     */
+    suspend fun runBackup(node: String, parameters: Map<String, String>): String? =
+        callForTask(post(listOf("nodes", node, "vzdump"), parameters))
+
     // --- Any path --------------------------------------------------------
 
     /**
@@ -613,6 +628,7 @@ class PveClient(
         overwrite: Boolean,
         storage: String? = null,
         start: Boolean = false,
+        unique: Boolean = false,
     ): String? {
         val form = buildMap {
             put("vmid", vmid.toString())
@@ -627,6 +643,8 @@ class PveClient(
             if (overwrite) put("force", "1")
             if (storage != null) put("storage", storage)
             if (start) put("start", "1")
+            // A copy beside the original needs its own network addresses.
+            if (unique) put("unique", "1")
         }
         val type = if (kind == ResourceKind.Qemu) "qemu" else "lxc"
         return callForTask(post(listOf("nodes", node, type), form))

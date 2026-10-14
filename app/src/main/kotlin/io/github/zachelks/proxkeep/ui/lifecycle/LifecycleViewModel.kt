@@ -183,6 +183,34 @@ class LifecycleViewModel(
 
     // --- Dialog data ----------------------------------------------------------
 
+    private val _restoreChoices = MutableStateFlow<Loadable<RestoreChoices>?>(null)
+
+    /** Null until [loadRestoreChoices] is called. */
+    val restoreChoices: StateFlow<Loadable<RestoreChoices>?> = _restoreChoices.asStateFlow()
+
+    /** Reads a free ID and the storages a restored copy can use. */
+    fun loadRestoreChoices() {
+        val resource = guest.value ?: return
+        val node = resource.node ?: return
+        val loaded = cluster.value as? ClusterState.Loaded ?: return
+        _restoreChoices.value = Loadable.Loading
+        viewModelScope.launch {
+            _restoreChoices.value = try {
+                Loadable.Loaded(readRestoreChoices(servers, node, resource.kind, loaded.resources.mapNotNull { it.vmid }.toSet()))
+            } catch (e: IOException) {
+                Loadable.Failed(e.toUiMessage())
+            }
+        }
+    }
+
+    /** Restores [backup] as a new guest beside this one. */
+    fun restoreAsNew(backup: GuestBackup, vmid: Int, storage: String?, unique: Boolean, start: Boolean): Boolean {
+        val resource = guest.value ?: return false
+        val node = resource.node ?: return false
+        val profileId = (cluster.value as? ClusterState.Loaded)?.profileId ?: return false
+        return lifecycle.restoreAsNew(profileId, node, resource.kind, backup.volume.volid, vmid, storage, unique, start)
+    }
+
     /** Reads where the guest can move, for the migration dialog. */
     fun loadMigration() {
         val resource = guest.value ?: return

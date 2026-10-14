@@ -16,6 +16,7 @@ import io.github.zachelks.proxkeep.ui.addserver.AddServerViewModel
 import io.github.zachelks.proxkeep.ui.console.TerminalScreen
 import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.ui.backupjobs.BackupJobsScreen
 import io.github.zachelks.proxkeep.ui.config.GuestConfigScreen
 import io.github.zachelks.proxkeep.ui.create.CreateGuestScreen
 import io.github.zachelks.proxkeep.ui.nodes.NodeScreen
@@ -75,6 +76,7 @@ fun AppNavigation() {
                     onOpenRoute = navigator::open,
                 )
             }
+            entry<Route.BackupJobs> { BackupJobsScreen(onClose = { navigator.close(Route.BackupJobs) }, onOpenRoute = navigator::open) }
             entry<Route.Storage> { route ->
                 StorageScreen(route.node, route.storage, onClose = { navigator.close(route) }, onOpenRoute = navigator::open)
             }

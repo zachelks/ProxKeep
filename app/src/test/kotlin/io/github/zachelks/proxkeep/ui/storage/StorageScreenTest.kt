@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.data.ClusterRepository
+import io.github.zachelks.proxkeep.data.GuestLifecycle
 import io.github.zachelks.proxkeep.data.PinnedServer
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.StorageTransfers
@@ -59,7 +60,7 @@ class StorageScreenTest {
         }
         val repository = fixture.signedInRepository(scope)
         val refresh = RefreshSignal()
-        viewModel = StorageViewModel(repository, ClusterRepository(repository, refresh, scope), StorageTransfers(repository, refresh, scope), refresh, "pve1", "local")
+        viewModel = StorageViewModel(repository, ClusterRepository(repository, refresh, scope), StorageTransfers(repository, refresh, scope), GuestLifecycle(repository, refresh, scope), refresh, "pve1", "local")
     }
 
     @AfterTest
@@ -88,9 +89,11 @@ class StorageScreenTest {
     }
 
     @Test
-    fun aProtectedBackupCannotBeDeleted() {
+    fun aProtectedBackupCanBeRestoredButNotDeleted() {
         compose.setContent { StorageScreen("pve1", "local", onClose = {}, onOpenRoute = {}, viewModel = viewModel) }
         compose.waitWithLooper { compose.onAllNodes(hasText("vzdump-qemu-100.vma.zst")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasContentDescription(string(R.string.action_more_for, "vzdump-qemu-100.vma.zst"))).assertDoesNotExist()
+        compose.onNode(hasContentDescription(string(R.string.action_more_for, "vzdump-qemu-100.vma.zst"))).performClick()
+        compose.onNodeWithText(string(R.string.restore_new_title)).assertExists()
+        compose.onNodeWithText(string(R.string.action_delete)).assertDoesNotExist()
     }
 }

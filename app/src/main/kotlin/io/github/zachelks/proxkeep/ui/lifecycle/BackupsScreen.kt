@@ -3,6 +3,7 @@
 package io.github.zachelks.proxkeep.ui.lifecycle
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,8 +14,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -23,7 +26,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -69,7 +71,10 @@ fun BackupsScreen(resourceId: String, onClose: () -> Unit) {
     val access by appContainer().access.access.collectAsStateWithLifecycle()
     val paths = guest?.vmid?.let { Permissions.guestPaths(it, guest?.pool) }.orEmpty()
     val canBackUp = access?.allows(paths, Privilege.VM_BACKUP) ?: true
+    val canAllocate = access?.allows(listOf("/vms"), Privilege.VM_ALLOCATE) ?: true
     var restoring by remember { mutableStateOf<GuestBackup?>(null) }
+    var restoringAsNew by remember { mutableStateOf<GuestBackup?>(null) }
+    val restoreChoices by viewModel.restoreChoices.collectAsStateWithLifecycle()
     val name = guest?.name ?: guest?.vmid?.toString() ?: resourceId
 
     Scaffold(
@@ -132,9 +137,26 @@ fun BackupsScreen(resourceId: String, onClose: () -> Unit) {
                                 }
                             },
                             trailingContent = {
-                                if (canBackUp) {
-                                    TextButton(onClick = { restoring = backup }, enabled = busy == null) {
-                                        Text(stringResource(R.string.action_restore))
+                                if (canBackUp || canAllocate) {
+                                    Box {
+                                        var menu by remember { mutableStateOf(false) }
+                                        TextButton(onClick = { menu = true }, enabled = busy == null) {
+                                            Text(stringResource(R.string.action_restore))
+                                        }
+                                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                            if (canBackUp) {
+                                                DropdownMenuItem(text = { Text(stringResource(R.string.restore_replace)) }, onClick = {
+                                                    menu = false
+                                                    restoring = backup
+                                                })
+                                            }
+                                            if (canAllocate) {
+                                                DropdownMenuItem(text = { Text(stringResource(R.string.restore_new_title)) }, onClick = {
+                                                    menu = false
+                                                    restoringAsNew = backup
+                                                })
+                                            }
+                                        }
                                     }
                                 }
                             },
@@ -143,6 +165,18 @@ fun BackupsScreen(resourceId: String, onClose: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+
+    restoringAsNew?.let { backup ->
+        RestoreAsNewDialog(
+            archiveName = backup.volume.volid.substringAfter(':'),
+            choices = restoreChoices,
+            onLoad = viewModel::loadRestoreChoices,
+            onDismiss = { restoringAsNew = null },
+        ) { vmid, storage, unique, start ->
+            restoringAsNew = null
+            viewModel.restoreAsNew(backup, vmid, storage, unique, start)
         }
     }
 

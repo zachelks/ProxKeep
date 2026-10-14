@@ -871,4 +871,35 @@
     <string name="storage_configure_title">Configure %1$s</string>
     <string name="action_add_storage">Add</string>
     <string name="storage_add_title">New storage</string>
+    <!-- Backup jobs and restoring as a new guest -->
+    <string name="section_datacenter">Datacenter</string>
+    <string name="backup_jobs_title">Backup jobs</string>
+    <string name="backup_jobs_summary">Scheduled backups, their storage and how long backups are kept</string>
+    <string name="backup_jobs_empty">No backup jobs. Guests are not backed up on a schedule.</string>
+    <string name="backup_job_edit">Backup job</string>
+    <string name="backup_job_new">New backup job</string>
+    <string name="backup_job_off">Off</string>
+    <string name="backup_job_all">All guests</string>
+    <string name="backup_job_all_except">All guests except %1$s</string>
+    <string name="backup_job_pool">Pool %1$s</string>
+    <string name="backup_job_guests">Guests %1$s</string>
+    <string name="action_run_now">Run now</string>
+    <string name="action_enable">Turn on</string>
+    <string name="action_disable">Turn off</string>
+    <string name="confirm_run_backup_title">Run this backup job now?</string>
+    <string name="confirm_run_backup_body">%1$s are backed up now, as the job does. Its schedule stays as it is.</string>
+    <string name="confirm_delete_backup_job_title">Delete this backup job?</string>
+    <string name="confirm_delete_backup_job_body">Its guests are no longer backed up on its schedule. Backups it already made stay.</string>
+    <string name="backup_job_started">Backups started. Follow them in Tasks.</string>
+    <string name="backup_job_nothing_to_run">None of this job\'s guests is on an online node.</string>
+    <string name="backup_job_enabled">Backup job turned on.</string>
+    <string name="backup_job_disabled">Backup job turned off.</string>
+    <string name="backup_job_deleted">Backup job deleted.</string>
+    <string name="restore_replace">Replace this guest</string>
+    <string name="restore_new_title">Restore as a new guest</string>
+    <string name="restore_storage">Storage for its disks</string>
+    <string name="restore_same_storage">Where they were</string>
+    <string name="restore_unique">Give it new network addresses</string>
+    <string name="done_restore_new">Guest %1$s restored</string>
+    <string name="failed_restore_new">Couldn\'t restore guest %1$s</string>
 </resources>

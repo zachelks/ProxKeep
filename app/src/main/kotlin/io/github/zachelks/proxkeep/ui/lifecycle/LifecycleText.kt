@@ -27,6 +27,7 @@ private fun LifecycleOperation.text(): OperationText = when (this) {
     LifecycleOperation.DeleteSnapshot -> OperationText(R.string.progress_delete_snapshot, R.string.done_delete_snapshot, R.string.failed_delete_snapshot)
     LifecycleOperation.Backup -> OperationText(R.string.progress_backup, R.string.done_backup, R.string.failed_backup)
     LifecycleOperation.Restore -> OperationText(R.string.progress_restore, R.string.done_restore, R.string.failed_restore)
+    LifecycleOperation.RestoreAsNew -> OperationText(R.string.progress_restore, R.string.done_restore_new, R.string.failed_restore_new)
     LifecycleOperation.Migrate -> OperationText(R.string.progress_migrate, R.string.done_migrate, R.string.failed_migrate)
     LifecycleOperation.Clone -> OperationText(R.string.progress_clone, R.string.done_clone, R.string.failed_clone)
     LifecycleOperation.ConvertToTemplate -> OperationText(R.string.progress_template, R.string.done_template, R.string.failed_template)

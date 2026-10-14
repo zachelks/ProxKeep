@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep.ui.cluster
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -251,6 +252,7 @@ fun InfrastructureRoute(onConsoleOpened: () -> Unit, onOpenRoute: (Route) -> Uni
             onOpenStorage = { node, storage -> onOpenRoute(Route.Storage(node, storage)) },
             canAddStorage = access?.allows(listOf("/storage"), Privilege.DATASTORE_ALLOCATE) ?: true,
             onAddStorage = { type, title -> onOpenRoute(Route.SchemaEdit(title, "/storage", "/storage", "POST", presets = mapOf("type" to type))) },
+            onOpenRoute = onOpenRoute,
         )
     }
 }
@@ -265,6 +267,7 @@ fun InfrastructureScreen(
     onOpenStorage: (node: String, storage: String) -> Unit = { _, _ -> },
     canAddStorage: Boolean = false,
     onAddStorage: (type: String, title: String) -> Unit = { _, _ -> },
+    onOpenRoute: (Route) -> Unit = {},
 ) {
     val nodes = state.resources.filter { it.kind == ResourceKind.Node }.sortedBy { it.node }
     var addMenu by remember { mutableStateOf(false) }
@@ -280,6 +283,17 @@ fun InfrastructureScreen(
     ) {
         if (state.refreshError != null) {
             item(key = "stale") { StaleBanner(state) }
+        }
+
+        item(key = "datacenter-title") { SectionTitle(stringResource(R.string.section_datacenter)) }
+        item(key = "datacenter") {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.backup_jobs_title)) },
+                    supportingContent = { Text(stringResource(R.string.backup_jobs_summary)) },
+                    modifier = Modifier.clickable { onOpenRoute(Route.BackupJobs) },
+                )
+            }
         }
 
         item(key = "nodes-title") { SectionTitle(stringResource(R.string.section_nodes)) }

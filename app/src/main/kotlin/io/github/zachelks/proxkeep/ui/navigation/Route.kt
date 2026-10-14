@@ -53,6 +53,10 @@ sealed interface Route {
     @Serializable
     data object CreateContainer : Route
 
+    /** The datacenter's scheduled backup jobs. */
+    @Serializable
+    data object BackupJobs : Route
+
     /** One storage on one node. */
     @Serializable
     data class Storage(val node: String, val storage: String) : Route

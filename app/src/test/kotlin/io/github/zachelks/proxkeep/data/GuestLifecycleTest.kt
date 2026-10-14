@@ -1,6 +1,7 @@
 package io.github.zachelks.proxkeep.data
 
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
+import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,23 @@ class GuestLifecycleTest {
 
         assertEquals(LifecycleEvent(LifecycleOperation.Migrate, "web", succeeded = true), event)
         withTimeout(TIMEOUT_MS) { lifecycle.busy.first { it.isEmpty() } }
+    }
+
+    @Test
+    fun aBackupIsRestoredAsANewGuest(): Unit = runBlocking {
+        val lifecycle = lifecycle()
+        var form = ""
+        fixture.route("/nodes/pve1/qemu") { request ->
+            form = request.body.readUtf8()
+            response("""{"data":"UPID:pve1:1:2:3:qmrestore:150:root@pam:"}""")
+        }
+        fixture.route("/nodes/pve1/tasks/UPID:pve1:1:2:3:qmrestore:150:root@pam:/status", """{"data":{"status":"stopped","exitstatus":"OK"}}""")
+        val event = async(start = CoroutineStart.UNDISPATCHED) { lifecycle.events.first() }
+
+        assertTrue(lifecycle.restoreAsNew(fixture.profile.id, "pve1", ResourceKind.Qemu, "pbs:backup/vm/100/x", 150, null, unique = true, start = false))
+
+        assertEquals(LifecycleEvent(LifecycleOperation.RestoreAsNew, "150", succeeded = true), withTimeout(TIMEOUT_MS) { event.await() })
+        assertTrue("vmid=150" in form && "unique=1" in form && "force" !in form, form)
     }
 
     @Test

@@ -8,16 +8,20 @@ import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ApplianceTemplate
 import io.github.zachelks.proxkeep.core.api.model.ChecksumAlgorithm
 import io.github.zachelks.proxkeep.core.api.model.NodeStorage
+import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.core.api.model.StorageVolume
 import io.github.zachelks.proxkeep.core.api.model.UrlMetadata
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.ClusterState
+import io.github.zachelks.proxkeep.data.GuestLifecycle
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.data.StorageTransfers
 import io.github.zachelks.proxkeep.data.Transfer
 import io.github.zachelks.proxkeep.ui.UiMessage
 import io.github.zachelks.proxkeep.ui.lifecycle.Loadable
+import io.github.zachelks.proxkeep.ui.lifecycle.RestoreChoices
+import io.github.zachelks.proxkeep.ui.lifecycle.readRestoreChoices
 import io.github.zachelks.proxkeep.ui.toUiMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -53,6 +57,7 @@ class StorageViewModel(
     private val servers: ServerRepository,
     clusterRepository: ClusterRepository,
     private val transfers: StorageTransfers,
+    private val lifecycle: GuestLifecycle,
     private val refreshSignal: RefreshSignal,
     val node: String,
     val storage: String,
@@ -87,7 +92,31 @@ class StorageViewModel(
     /** The template catalog; null until [loadTemplates] is called. */
     val templates: StateFlow<Loadable<List<ApplianceTemplate>>?> = _templates.asStateFlow()
 
+    private val _restoreChoices = MutableStateFlow<Loadable<RestoreChoices>?>(null)
+
+    /** Null until [loadRestoreChoices] is called. */
+    val restoreChoices: StateFlow<Loadable<RestoreChoices>?> = _restoreChoices.asStateFlow()
+
     fun retry() = refreshSignal.request()
+
+    fun loadRestoreChoices(kind: ResourceKind) {
+        val loaded = clusterState.value as? ClusterState.Loaded ?: return
+        _restoreChoices.value = Loadable.Loading
+        viewModelScope.launch {
+            _restoreChoices.value = try {
+                Loadable.Loaded(readRestoreChoices(servers, node, kind, loaded.resources.mapNotNull { it.vmid }.toSet()))
+            } catch (e: IOException) {
+                Loadable.Failed(e.toUiMessage())
+            }
+        }
+    }
+
+    /** Restores a backup on this storage as a new guest on this node. */
+    fun restoreAsNew(volume: StorageVolume, vmid: Int, storage: String?, unique: Boolean, start: Boolean): Boolean {
+        val profileId = profileId() ?: return false
+        val kind = GuestLifecycle.backupKind(volume.volid, volume.format) ?: return false
+        return lifecycle.restoreAsNew(profileId, node, kind, volume.volid, vmid, storage, unique, start)
+    }
 
     private fun profileId(): String? = (clusterState.value as? ClusterState.Loaded)?.profileId
 

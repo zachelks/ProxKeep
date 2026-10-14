@@ -61,6 +61,7 @@ import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.model.ChecksumAlgorithm
 import io.github.zachelks.proxkeep.core.api.model.Privilege
 import io.github.zachelks.proxkeep.core.api.model.StorageVolume
+import io.github.zachelks.proxkeep.data.GuestLifecycle
 import io.github.zachelks.proxkeep.data.Transfer
 import io.github.zachelks.proxkeep.ui.appContainer
 import io.github.zachelks.proxkeep.ui.components.CenteredProgress
@@ -73,6 +74,7 @@ import io.github.zachelks.proxkeep.ui.format.formatBytes
 import io.github.zachelks.proxkeep.ui.format.usageFraction
 import io.github.zachelks.proxkeep.ui.lifecycle.ConfirmDialog
 import io.github.zachelks.proxkeep.ui.lifecycle.Loadable
+import io.github.zachelks.proxkeep.ui.lifecycle.RestoreAsNewDialog
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.text
 
@@ -80,7 +82,7 @@ import io.github.zachelks.proxkeep.ui.text
 fun storageViewModel(node: String, storage: String): StorageViewModel {
     val container = appContainer()
     return viewModel(key = "storage:$node:$storage") {
-        StorageViewModel(container.repository, container.cluster, container.transfers, container.refresh, node, storage)
+        StorageViewModel(container.repository, container.cluster, container.transfers, container.guestLifecycle, container.refresh, node, storage)
     }
 }
 
@@ -113,6 +115,9 @@ fun StorageScreen(
     val snackbar = remember { SnackbarHostState() }
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf<StorageVolume?>(null) }
+    var restoring by remember { mutableStateOf<StorageVolume?>(null) }
+    val restoreChoices by viewModel.restoreChoices.collectAsStateWithLifecycle()
+    val canRestore = access?.allows(listOf("/vms"), Privilege.VM_ALLOCATE) ?: true
     var addMenu by remember { mutableStateOf(false) }
     var step by remember { mutableStateOf<AddStep?>(null) }
     val loaded = (overview as? Loadable.Loaded)?.value
@@ -231,7 +236,12 @@ fun StorageScreen(
                         }
                     }
                     items(shown, key = { it.volid }) { volume ->
-                        VolumeRow(volume, canDelete = canAllocate && !busy) { confirmDelete = volume }
+                        VolumeRow(
+                            volume,
+                            canDelete = canAllocate && !busy,
+                            onDelete = { confirmDelete = volume },
+                            onRestore = { restoring = volume }.takeIf { canRestore && GuestLifecycle.backupKind(volume.volid, volume.format) != null },
+                        )
                         HorizontalDivider()
                     }
                 }
@@ -251,6 +261,18 @@ fun StorageScreen(
             },
             onDismiss = { confirmDelete = null },
         )
+    }
+    restoring?.let { volume ->
+        val kind = GuestLifecycle.backupKind(volume.volid, volume.format)
+        RestoreAsNewDialog(
+            archiveName = StorageViewModel.displayName(volume.volid),
+            choices = restoreChoices,
+            onLoad = { kind?.let(viewModel::loadRestoreChoices) },
+            onDismiss = { restoring = null },
+        ) { vmid, target, unique, start ->
+            restoring = null
+            viewModel.restoreAsNew(volume, vmid, target, unique, start)
+        }
     }
     when (val current = step) {
         null -> Unit
@@ -313,7 +335,7 @@ private fun TransferRow(transfer: Transfer) {
 }
 
 @Composable
-private fun VolumeRow(volume: StorageVolume, canDelete: Boolean, onDelete: () -> Unit) {
+private fun VolumeRow(volume: StorageVolume, canDelete: Boolean, onDelete: () -> Unit, onRestore: (() -> Unit)?) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     val name = StorageViewModel.displayName(volume.volid)
@@ -332,17 +354,25 @@ private fun VolumeRow(volume: StorageVolume, canDelete: Boolean, onDelete: () ->
                 volume.notes?.takeIf { it.isNotBlank() }?.let { Text(it.trim(), style = MaterialTheme.typography.bodySmall) }
             }
         },
-        trailingContent = if (canDelete && volume.protected != true) {
+        trailingContent = if ((canDelete && volume.protected != true) || onRestore != null) {
             {
                 Box {
                     IconButton(onClick = { expanded = true }) {
                         Icon(painterResource(R.drawable.ic_more_vert), contentDescription = stringResource(R.string.action_more_for, name))
                     }
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.action_delete)) }, onClick = {
-                            expanded = false
-                            onDelete()
-                        })
+                        if (onRestore != null) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.restore_new_title)) }, onClick = {
+                                expanded = false
+                                onRestore()
+                            })
+                        }
+                        if (canDelete && volume.protected != true) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.action_delete)) }, onClick = {
+                                expanded = false
+                                onDelete()
+                            })
+                        }
                     }
                 }
             }

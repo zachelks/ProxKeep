@@ -24,6 +24,7 @@ enum class LifecycleOperation {
     DeleteSnapshot,
     Backup,
     Restore,
+    RestoreAsNew,
     Migrate,
     Clone,
     ConvertToTemplate,
@@ -98,11 +99,48 @@ class GuestLifecycle(
         return true
     }
 
-    private companion object {
-        const val EVENT_BUFFER = 16
-        const val POLL_MS = 2_000L
+    /**
+     * Restores [archive] as a new guest with ID [vmid], beside the guest it
+     * was taken from.
+     *
+     * @param unique gives the new guest its own network addresses
+     */
+    fun restoreAsNew(
+        profileId: String,
+        node: String,
+        kind: ResourceKind,
+        archive: String,
+        vmid: Int,
+        storage: String?,
+        unique: Boolean,
+        start: Boolean,
+    ): Boolean {
+        val type = if (kind == ResourceKind.Qemu) "qemu" else "lxc"
+        val resource = ClusterResource(id = "$type/$vmid", type = type, node = node, vmid = vmid, name = vmid.toString())
+        return run(profileId, resource, LifecycleOperation.RestoreAsNew) { client, guest ->
+            client.restore(guest.node, guest.kind, guest.vmid, archive, overwrite = false, storage = storage, start = start, unique = unique)
+        }
+    }
+
+    companion object {
+        /**
+         * The kind of guest a backup holds, from its volume ID and format:
+         * `vzdump-qemu-…` and Backup Server `vm/…` hold virtual machines,
+         * `vzdump-lxc-…` and `ct/…` hold containers.
+         */
+        fun backupKind(volid: String, format: String? = null): ResourceKind? {
+            val path = volid.substringAfter(':')
+            return when {
+                "vzdump-qemu-" in path || path.startsWith("backup/vm/") || format == "pbs-vm" -> ResourceKind.Qemu
+                "vzdump-lxc-" in path || "vzdump-openvz-" in path || path.startsWith("backup/ct/") || format == "pbs-ct" -> ResourceKind.Lxc
+                else -> null
+            }
+        }
+
+        private const val EVENT_BUFFER = 16
+        private const val POLL_MS = 2_000L
 
         /** The node a task runs on, from `UPID:node:...`. */
-        fun upidNode(upid: String): String? = upid.split(':').getOrNull(1)?.takeIf { it.isNotEmpty() }
+        private fun upidNode(upid: String): String? = upid.split(':').getOrNull(1)?.takeIf { it.isNotEmpty() }
     }
 }
