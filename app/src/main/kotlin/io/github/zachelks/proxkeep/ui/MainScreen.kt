@@ -25,7 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.data.Session
+import io.github.zachelks.proxkeep.ui.backupserver.BackupServerHome
 import io.github.zachelks.proxkeep.ui.cluster.InfrastructureRoute
 import io.github.zachelks.proxkeep.ui.cluster.OverviewRoute
 import io.github.zachelks.proxkeep.ui.components.CenteredProgress
@@ -34,11 +36,11 @@ import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.guests.GuestsPane
 import io.github.zachelks.proxkeep.ui.guests.message
 import io.github.zachelks.proxkeep.ui.lifecycle.message
-import io.github.zachelks.proxkeep.ui.storage.message
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.search.SearchScreen
 import io.github.zachelks.proxkeep.ui.search.SearchViewModel
+import io.github.zachelks.proxkeep.ui.storage.message
 import io.github.zachelks.proxkeep.ui.tasks.TasksPane
 
 /** The app bar of a top-level destination, given its title. */
@@ -79,12 +81,13 @@ fun MainScreen(navigator: Navigator) {
     }
 
     // Back from another destination returns to Overview before leaving the app.
-    BackHandler(enabled = destination != TopLevelDestination.Overview) {
+    val session by viewModel.session.collectAsStateWithLifecycle()
+    val product = (session as? Session.Active)?.profile?.product ?: Product.Pve
+    BackHandler(enabled = destination != TopLevelDestination.Overview && product == Product.Pve) {
         destination = TopLevelDestination.Overview
     }
     BackHandler(enabled = searching) { searching = false }
 
-    val session by viewModel.session.collectAsStateWithLifecycle()
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val consoles by container.consoles.sessions.collectAsStateWithLifecycle()
     val desktop by container.desktops.current.collectAsStateWithLifecycle()
@@ -109,12 +112,19 @@ fun MainScreen(navigator: Navigator) {
             onOpenConsoles = { navigator.open(Route.Terminal) },
             desktopOpen = desktop != null,
             onOpenDesktop = { navigator.open(Route.Desktop) },
-            onSearch = { searching = true },
+            // Search covers a Proxmox VE cluster's guests, nodes and storage.
+            onSearch = if (product == Product.Pve) ({ searching = true }) else null,
             onAddServer = { navigator.open(Route.SignIn()) },
             onSettings = { navigator.open(Route.Settings) },
         )
     }
     val openTerminal = { navigator.open(Route.Terminal) }
+
+    // A Backup Server has screens of its own.
+    if (product == Product.Pbs) {
+        BackupServerHome(topBar = topBar, snackbars = snackbars, onOpenRoute = navigator::open)
+        return
+    }
 
     // The search covers the destinations while it is open.
     Box(modifier = Modifier.fillMaxSize()) {
@@ -174,7 +184,7 @@ fun MainScreen(navigator: Navigator) {
             }
         }
 
-        if (searching && session is Session.Active) {
+        if (searching && session is Session.Active && product == Product.Pve) {
             val search = viewModel { SearchViewModel(container.cluster, container.refresh) }
             SearchScreen(
                 viewModel = search,

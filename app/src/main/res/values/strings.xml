@@ -40,7 +40,11 @@
     <string name="address_intro">Enter the address you use to open the server\'s web interface.</string>
     <string name="field_address">Server address</string>
     <string name="field_address_placeholder">192.168.1.10 or pve.example.com</string>
-    <string name="field_address_hint">Port 8006 is used unless you add another, such as :443.</string>
+    <string name="field_address_hint">Port %1$d is used unless you add another, such as :443.</string>
+    <string name="field_product">Server type</string>
+    <string name="product_pve">Proxmox VE</string>
+    <string name="product_pbs">Proxmox Backup Server</string>
+    <string name="product_pdm">Proxmox Datacenter Manager</string>
     <string name="field_name">Name (optional)</string>
     <string name="field_name_hint">How this server is labelled in the app.</string>
 
@@ -258,6 +262,14 @@
     <string name="task_srvrestart">Restart service %1$s</string>
     <string name="task_srvreload">Reload service %1$s</string>
     <string name="task_download">Download %1$s</string>
+    <string name="task_pbs_gc">Garbage collection of %1$s</string>
+    <string name="task_pbs_verify">Verify %1$s</string>
+    <string name="task_pbs_verify_job">Verify job %1$s</string>
+    <string name="task_pbs_prune">Prune %1$s</string>
+    <string name="task_pbs_prune_job">Prune job %1$s</string>
+    <string name="task_pbs_sync_job">Sync job %1$s</string>
+    <string name="task_pbs_backup">Backup to %1$s</string>
+    <string name="task_pbs_reader">Read from %1$s</string>
 
     <!-- Guest OS types. Each is a category chosen when the guest was created, not a detected system. -->
     <string name="os_other">Other</string>
@@ -1015,4 +1027,96 @@
     <string name="dc_failed">The change could not be made.</string>
     <string name="secret_title">Copy the secret now</string>
     <string name="secret_body">The server shows this secret only once. Store it somewhere safe before you close this.</string>
+
+    <!-- Proxmox Backup Server -->
+    <string name="pbs_destination_datastores">Datastores</string>
+    <string name="pbs_destination_administration">Administration</string>
+    <string name="pbs_server">Server</string>
+    <string name="pbs_cpu_detail">all cores</string>
+    <string name="pbs_uptime">Up for %1$s</string>
+    <string name="pbs_no_datastores">This server has no datastores yet. Add one in Administration.</string>
+    <string name="pbs_datastore_unavailable">Unavailable</string>
+    <string name="pbs_estimated_full">Full around %1$s at the current growth.</string>
+    <string name="pbs_deduplication">Deduplication: %1$.1f×</string>
+    <string name="pbs_gc_pending">%1$s can be freed by the next garbage collection.</string>
+    <string name="pbs_namespace">Namespace</string>
+    <string name="pbs_no_groups">No backups in this namespace.</string>
+    <string name="pbs_no_snapshots">This group has no snapshots.</string>
+    <string name="pbs_type_vm">Virtual machine</string>
+    <string name="pbs_type_ct">Container</string>
+    <string name="pbs_type_host">Host</string>
+    <plurals name="pbs_snapshot_count">
+        <item quantity="one">%1$d snapshot</item>
+        <item quantity="other">%1$d snapshots</item>
+    </plurals>
+    <string name="pbs_last_backup">last %1$s</string>
+    <string name="pbs_not_verified">Not verified</string>
+    <string name="pbs_verified_ok">Verified</string>
+    <string name="pbs_verify_failed">Verification failed</string>
+    <string name="pbs_protected_label">Protected</string>
+    <string name="pbs_encrypted">Encrypted</string>
+    <string name="pbs_action_gc">Start garbage collection</string>
+    <string name="pbs_action_verify_all">Verify all</string>
+    <string name="pbs_action_prune_all">Prune all</string>
+    <string name="pbs_action_datastore_settings">Datastore settings</string>
+    <string name="pbs_datastore_settings">Settings of %1$s</string>
+    <string name="pbs_action_verify">Verify</string>
+    <string name="pbs_action_prune">Prune</string>
+    <string name="pbs_action_preview">Preview</string>
+    <string name="pbs_action_protect">Protect</string>
+    <string name="pbs_action_unprotect">Remove protection</string>
+    <string name="pbs_verify_all_title">Verify %1$s?</string>
+    <string name="pbs_verify_all_body">Reads every snapshot in this namespace and checks its chunks. This can take hours. Follow it in Tasks.</string>
+    <string name="pbs_skip_verified">Skip snapshots that passed before</string>
+    <string name="pbs_prune_all_title">Prune %1$s?</string>
+    <string name="pbs_prune_all_body">Removes, in every group of this namespace, the snapshots these counts do not keep. Protected snapshots stay. Leave a field empty to skip it.</string>
+    <string name="pbs_prune_group_title">Prune %1$s</string>
+    <string name="pbs_prune_group_body">Choose how many snapshots to keep. You see what would be removed before anything is.</string>
+    <string name="pbs_prune_nothing">These counts keep every snapshot. Nothing would be removed.</string>
+    <plurals name="pbs_prune_removes">
+        <item quantity="one">Removes %1$d snapshot and keeps %2$d:</item>
+        <item quantity="other">Removes %1$d snapshots and keeps %2$d:</item>
+    </plurals>
+    <plurals name="pbs_prune_more">
+        <item quantity="one">and %1$d more</item>
+        <item quantity="other">and %1$d more</item>
+    </plurals>
+    <string name="pbs_keep_last">Keep last</string>
+    <string name="pbs_keep_hourly">Keep hourly</string>
+    <string name="pbs_keep_daily">Keep daily</string>
+    <string name="pbs_keep_weekly">Keep weekly</string>
+    <string name="pbs_keep_monthly">Keep monthly</string>
+    <string name="pbs_keep_yearly">Keep yearly</string>
+    <string name="pbs_keep_invalid">Enter a number from 1 to %1$d.</string>
+    <string name="pbs_delete_group_title">Delete %1$s?</string>
+    <string name="pbs_delete_group_body">Deletes every snapshot in this group except protected ones. This cannot be undone.</string>
+    <string name="pbs_delete_snapshot_title">Delete the snapshot of %1$s?</string>
+    <string name="pbs_delete_snapshot_body">The snapshot cannot be restored afterwards. Its space is freed by the next garbage collection.</string>
+    <string name="pbs_gc_started">Garbage collection started. Follow it in Tasks.</string>
+    <string name="pbs_verify_started">Verification started. Follow it in Tasks.</string>
+    <string name="pbs_prune_started">Pruning started. Follow it in Tasks.</string>
+    <string name="pbs_verified">The snapshot is verified.</string>
+    <string name="pbs_protected">The snapshot is protected.</string>
+    <string name="pbs_unprotected">The snapshot is no longer protected.</string>
+    <string name="pbs_snapshot_deleted">Snapshot deleted.</string>
+    <string name="pbs_group_deleted">Group deleted.</string>
+    <string name="pbs_pruned">Pruned.</string>
+    <string name="pbs_task_failed">The task failed.</string>
+    <string name="pbs_job_done">The job ran.</string>
+    <string name="pbs_group_datastores">Datastores and jobs</string>
+    <string name="pbs_group_server">Server</string>
+    <string name="pbs_datastore_config">Datastores</string>
+    <string name="pbs_sync_jobs">Sync jobs</string>
+    <string name="pbs_verify_jobs">Verify jobs</string>
+    <string name="pbs_prune_jobs">Prune jobs</string>
+    <string name="pbs_remotes">Remotes</string>
+    <string name="pbs_traffic_control">Traffic control</string>
+    <string name="pbs_dns">DNS</string>
+    <string name="pbs_time">Time zone</string>
+    <string name="pbs_refresh_updates">Check for updates</string>
+    <string name="pbs_refresh_updates_body">Reads the package lists again from the configured repositories.</string>
+    <string name="pbs_refresh_updates_started">Checking for updates.</string>
+    <string name="pbs_network_apply">Apply network changes</string>
+    <string name="pbs_network_apply_body">Applies the pending network configuration. A mistake can make the server unreachable.</string>
+    <string name="pbs_network_applied">Network changes applied.</string>
 </resources>

@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep.data
 
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.ServerAddress
 import kotlinx.serialization.Serializable
 
@@ -38,6 +39,8 @@ data class ServerProfile(
     val clientCertAlias: String? = null,
     /** The password, encrypted, only when the person chose to save it. */
     val encryptedPassword: String? = null,
+    /** Which Proxmox product the server runs. Profiles saved before there was a choice are Proxmox VE. */
+    val product: Product = Product.Pve,
 ) {
     val address: ServerAddress
         get() = ServerAddress(host, port)

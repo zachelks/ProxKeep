@@ -94,6 +94,15 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - Path values go through `CollectionSpec.fill`, which encodes slashes with `encodePathValue`; `PveClient` decodes each segment, so `10.0.0.0/8` stays one segment.
 - Permissions have no item paths, so they are removed with `PUT /access/acl` and `delete=1` (`aclRemoval`). A write that returns a secret, such as a new API token, shows it once (`SchemaEditViewModel.secret`).
 - Ceph's status is hand-designed (`CephScreen`), since its JSON changes between Ceph releases; `CephStatus.fromJson` reads what is there.
+- `SectionList` renders any list of `DatacenterGroup`s, so the Backup Server's administration reuses it.
+
+**Products.** A profile names its `Product`: Proxmox VE, Backup Server or Datacenter Manager. The product sets the default port, the ticket cookie, the API token header and where the schema is published; `PveClient` carries it and keeps it across `withCredentials`. All three share the `/api2/json` layout, sign-in, realms, second factors and tasks, so one client serves them. `PveClient.clusterTasks` reads `/nodes/localhost/tasks` on the products without a cluster.
+- `MainScreen` shows the VE destinations for Proxmox VE and hands over to `BackupServerHome` for a Backup Server. Search, the widget's snapshot and offline-node alerts are VE only; failed-task alerts work for every product.
+
+**Backup Server.**
+- The calls are extension functions in core:api `pbs/BackupServer.kt`, built on `PveClient.read` and `write`. The server calls itself `localhost` (`PBS_NODE`).
+- `BackupServerHome` has three destinations: datastores (the server's status and each datastore's space), tasks (the shared `TasksPane`) and administration (`BACKUP_SERVER_GROUPS`, through the collection engine: datastore configuration, sync, verify and prune jobs, remotes, traffic control, users, services, updates, network, DNS, time, disks and notifications).
+- `DatastoreScreen` browses a datastore's groups by namespace and runs garbage collection, verification and pruning; long tasks are reported once started and followed in Tasks. `BackupGroupScreen` verifies, protects and deletes snapshots, and previews a prune with a dry run before applying it.
 
 **Background work.**
 - `StatusWorker` (WorkManager) runs while alerts are on or a widget or tile is placed. It checks every saved server it can reach without the person (`ServerRepository.backgroundClient`: the session's client, an API token, or a saved password without a second factor) and records the signed-in server's `StatusSnapshot`. A saved password rejected in the background is forgotten, as on sign-in.
@@ -150,4 +159,6 @@ VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 7, Datacenter.** Done in code: cluster options, access control (users, API tokens, groups, pools, roles, permissions, realms), the datacenter firewall, high availability, replication, SDN, Ceph status and pools, and notifications. Not yet confirmed against a real server. Not done: two-factor management, node and guest firewalls, Ceph OSD and monitor management, and a summary of what applying SDN changes.
 
-**Milestones 8 and 9.** Not started.
+**Milestone 8, Backup Server.** Done in code: a product choice when adding a server, the server's status, datastores with space, deduplication and estimated full date, namespaces, backup groups and snapshots, garbage collection, verification, pruning with a preview, protection and deletion, sync, verify and prune jobs with run now, remotes, datastore configuration and the server's administration. Not yet confirmed against a real server. Not done: tape, restoring single files, two-factor and permission management, and the Backup Server's own node screen.
+
+**Milestone 9.** Not started.

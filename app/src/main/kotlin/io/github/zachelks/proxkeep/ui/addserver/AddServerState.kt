@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.ConnectionOptions
 import io.github.zachelks.proxkeep.core.api.ProbeResult
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.ServerAddress
 import io.github.zachelks.proxkeep.core.api.auth.ApiTokenCredentials
 import io.github.zachelks.proxkeep.core.api.auth.Credentials
@@ -104,6 +105,9 @@ class AddServerState(
     private fun passwordPrincipal(): String? =
         existing?.takeIf { it.authMethod == AuthMethod.Password }?.principal
 
+    /** Which Proxmox product the server runs, which sets its default port and how the app signs in. */
+    var product by mutableStateOf(existing?.product ?: Product.Pve)
+
     /** True when the server has realms that sign in through an external page, such as OpenID Connect. */
     var hasWebRealms by mutableStateOf(false)
         private set
@@ -130,7 +134,7 @@ class AddServerState(
 
     /** Contacts the server at [host] and moves on to the certificate or sign-in step. */
     fun submitAddress() {
-        val parsed = ServerAddress.parse(host)
+        val parsed = ServerAddress.parse(host, product.defaultPort)
         if (parsed == null) {
             error = UiMessage(R.string.error_invalid_address)
             return
@@ -216,7 +220,7 @@ class AddServerState(
                 }
                 passwordToSave = secret.takeIf { savePassword }
                 launch {
-                    val client = repository.newClient(target, pin, options)
+                    val client = repository.newClient(target, pin, options, product)
                     when (val result = client.login(user, realm, secret)) {
                         is LoginResult.Success -> finish(target, result.credentials, result.clusterName)
                         is LoginResult.SecondFactorRequired -> showSecondFactor(result)
@@ -237,7 +241,7 @@ class AddServerState(
                 launch {
                     val credentials = ApiTokenCredentials(id, secret)
                     // Any authenticated call proves the token works; this one needs no privileges.
-                    repository.newClient(target, pin, options).withCredentials(credentials).version()
+                    repository.newClient(target, pin, options, product).withCredentials(credentials).version()
                     finish(target, credentials, clusterName = null)
                 }
             }
@@ -270,7 +274,7 @@ class AddServerState(
             return
         }
         launch {
-            val result = repository.newClient(target, pin, options).completeSecondFactor(user, pending, factorKind, entered)
+            val result = repository.newClient(target, pin, options, product).completeSecondFactor(user, pending, factorKind, entered)
             finish(target, result.credentials, result.clusterName)
         }
     }
@@ -290,7 +294,7 @@ class AddServerState(
         }
         launch {
             try {
-                val credentials = repository.newClient(target, pin, options).renewTicket(TicketCredentials(user, ticket, null))
+                val credentials = repository.newClient(target, pin, options, product).renewTicket(TicketCredentials(user, ticket, null))
                 finish(target, credentials, clusterName = null)
             } finally {
                 if (step == Step.WebSignIn) step = Step.SignIn
@@ -319,6 +323,7 @@ class AddServerState(
             authMethod = method,
             principal = principal,
             clientCertAlias = clientCertAlias,
+            product = product,
         )
         repository.saveAndActivate(profile, credentials, acceptedHeaders, passwordToSave.takeIf { method == AuthMethod.Password })
         clearSecrets()

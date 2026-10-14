@@ -92,6 +92,14 @@ sealed interface Route {
     @Serializable
     data object Ceph : Route
 
+    /** One datastore of a Backup Server: its space, namespaces and backup groups. */
+    @Serializable
+    data class Datastore(val store: String) : Route
+
+    /** One backup group's snapshots on a Backup Server, such as `vm/100` in a namespace. */
+    @Serializable
+    data class BackupGroup(val store: String, val ns: String, val type: String, val id: String) : Route
+
     /** The open remote desktop. */
     @Serializable
     data object Desktop : Route

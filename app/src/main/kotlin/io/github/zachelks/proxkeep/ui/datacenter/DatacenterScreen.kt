@@ -146,18 +146,7 @@ fun availableEntries(schema: ApiSchema?, group: DatacenterGroup): List<Datacente
 fun DatacenterScreen(onClose: () -> Unit, onOpenRoute: (Route) -> Unit) {
     val container = appContainer()
     val cluster by container.cluster.state.collectAsStateWithLifecycle()
-    var schema by remember { mutableStateOf<ApiSchema?>(null) }
-    var confirm by remember { mutableStateOf<DatacenterEntry.Apply?>(null) }
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val resources = LocalResources.current
-    LaunchedEffect(Unit) {
-        schema = try {
-            container.schemas.schema()
-        } catch (e: IOException) {
-            null
-        }
-    }
     // Node-scoped lists, such as Ceph pools, are read through the first online node.
     val node = (cluster as? ClusterState.Loaded)?.resources
         ?.filter { it.kind == ResourceKind.Node && it.status == "online" }?.mapNotNull { it.node }?.minOrNull()
@@ -175,32 +164,56 @@ fun DatacenterScreen(onClose: () -> Unit, onOpenRoute: (Route) -> Unit) {
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { innerPadding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding), contentPadding = PaddingValues(bottom = 24.dp)) {
-            DATACENTER_GROUPS.forEach { group ->
-                val entries = availableEntries(schema, group)
-                if (entries.isEmpty()) return@forEach
-                item(key = "group:${group.title}") {
-                    Text(
-                        stringResource(group.title),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 4.dp),
-                    )
-                }
-                items(entries, key = { "entry:${group.title}:${it.label}" }) { entry ->
-                    val label = stringResource(entry.label)
-                    ListItem(
-                        headlineContent = { Text(label) },
-                        modifier = Modifier.clickable {
-                            when (entry) {
-                                is DatacenterEntry.Collection -> onOpenRoute(Route.Collection(entry.specId, entry.args(node)))
-                                is DatacenterEntry.Settings -> onOpenRoute(Route.SchemaEdit(label, entry.path, entry.schemaPath, "PUT"))
-                                is DatacenterEntry.Screen -> onOpenRoute(entry.route)
-                                is DatacenterEntry.Apply -> confirm = entry
-                            }
-                        },
-                    )
-                }
+        SectionList(DATACENTER_GROUPS, onOpenRoute, snackbar, Modifier.padding(innerPadding), node)
+    }
+}
+
+/**
+ * Grouped entries that open collections, settings and screens, leaving out
+ * what the server's schema does not have.
+ *
+ * @param node fills `{node}` in node-scoped entries
+ */
+@Composable
+fun SectionList(groups: List<DatacenterGroup>, onOpenRoute: (Route) -> Unit, snackbar: SnackbarHostState, modifier: Modifier = Modifier, node: String? = null) {
+    val container = appContainer()
+    var schema by remember { mutableStateOf<ApiSchema?>(null) }
+    var confirm by remember { mutableStateOf<DatacenterEntry.Apply?>(null) }
+    val scope = rememberCoroutineScope()
+    val resources = LocalResources.current
+    LaunchedEffect(Unit) {
+        schema = try {
+            container.schemas.schema()
+        } catch (e: IOException) {
+            null
+        }
+    }
+
+    LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        groups.forEach { group ->
+            val entries = availableEntries(schema, group)
+            if (entries.isEmpty()) return@forEach
+            item(key = "group:${group.title}") {
+                Text(
+                    stringResource(group.title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 4.dp),
+                )
+            }
+            items(entries, key = { "entry:${group.title}:${it.label}" }) { entry ->
+                val label = stringResource(entry.label)
+                ListItem(
+                    headlineContent = { Text(label) },
+                    modifier = Modifier.clickable {
+                        when (entry) {
+                            is DatacenterEntry.Collection -> onOpenRoute(Route.Collection(entry.specId, entry.args(node)))
+                            is DatacenterEntry.Settings -> onOpenRoute(Route.SchemaEdit(label, entry.path, entry.schemaPath, "PUT"))
+                            is DatacenterEntry.Screen -> onOpenRoute(entry.route)
+                            is DatacenterEntry.Apply -> confirm = entry
+                        }
+                    },
+                )
             }
         }
     }

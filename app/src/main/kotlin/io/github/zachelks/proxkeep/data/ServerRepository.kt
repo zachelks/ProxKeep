@@ -2,6 +2,7 @@ package io.github.zachelks.proxkeep.data
 
 import io.github.zachelks.proxkeep.core.api.ConnectionOptions
 import io.github.zachelks.proxkeep.core.api.ProbeResult
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.PveApiException
 import io.github.zachelks.proxkeep.core.api.PveClient
 import io.github.zachelks.proxkeep.core.api.ServerAddress
@@ -121,9 +122,10 @@ class ServerRepository(
         address: ServerAddress,
         pinnedSha256: String?,
         options: ConnectionOptions = ConnectionOptions(),
+        product: Product = Product.Pve,
     ): PveClient = withContext(Dispatchers.IO) {
         val trust = ServerTrust(pinnedSha256, clientKey = options.clientKey)
-        PveClient(address.apiBaseUrl, options.applyTo(trust.applyTo(http)))
+        PveClient(address.apiBaseUrl, options.applyTo(trust.applyTo(http)), product = product)
     }
 
     suspend fun probe(
@@ -191,7 +193,7 @@ class ServerRepository(
             }
             val options = connectionOptions(headers, toStore.clientCertAlias)
             persist(StoredServers(profiles, toStore.id))
-            val client = newClient(toStore.address, toStore.pinnedSha256, options).withCredentials(credentials)
+            val client = newClient(toStore.address, toStore.pinnedSha256, options, toStore.product).withCredentials(credentials)
             setSession(Session.Active(toStore, client))
         }
     }
@@ -234,7 +236,7 @@ class ServerRepository(
         } catch (e: IllegalArgumentException) {
             return null
         }
-        val client = newClient(profile.address, profile.pinnedSha256, options)
+        val client = newClient(profile.address, profile.pinnedSha256, options, profile.product)
         return when (profile.authMethod) {
             AuthMethod.ApiToken -> {
                 val secret = profile.encryptedSecret?.let { withContext(Dispatchers.IO) { secrets.decrypt(it) } } ?: return null
@@ -318,7 +320,7 @@ class ServerRepository(
             if (password == null || headers == null) {
                 Session.SignedOut(profile)
             } else {
-                val client = newClient(profile.address, profile.pinnedSha256, connectionOptions(headers, profile.clientCertAlias))
+                val client = newClient(profile.address, profile.pinnedSha256, connectionOptions(headers, profile.clientCertAlias), profile.product)
                 when (val result = client.login(profile.principal.substringBeforeLast('@'), profile.principal.substringAfterLast('@'), password)) {
                     is LoginResult.Success -> Session.Active(profile, client.withCredentials(result.credentials))
                     // The person has to enter the code; the sign-in screen starts with the saved password.
@@ -381,7 +383,7 @@ class ServerRepository(
                 } catch (e: IllegalArgumentException) {
                     return Session.SignedOut(profile)
                 }
-                return Session.Active(profile, newClient(profile.address, profile.pinnedSha256, options).withCredentials(credentials))
+                return Session.Active(profile, newClient(profile.address, profile.pinnedSha256, options, profile.product).withCredentials(credentials))
             }
         }
         return Session.SignedOut(profile)

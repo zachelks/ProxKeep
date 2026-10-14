@@ -34,6 +34,11 @@ class WebSignInTest {
             "PVE:alice@oidc:6712F3A1::c2ln",
             ticketFromCookies("lang=en; PVEAuthCookie=PVE%3Aalice%40oidc%3A6712F3A1%3A%3Ac2ln; other=1"),
         )
+        assertEquals(
+            "PBS:backup@pbs:6712F3A1::c2ln",
+            ticketFromCookies("PVEAuthCookie=PVE%3Aother%40pam%3A1%3A%3Ax; PBSAuthCookie=PBS%3Abackup%40pbs%3A6712F3A1%3A%3Ac2ln", "PBSAuthCookie"),
+            "a Backup Server's page keeps its ticket in its own cookie",
+        )
         assertNull(ticketFromCookies(null))
         assertNull(ticketFromCookies("lang=en"))
         assertNull(ticketFromCookies("PVEAuthCookie=PVE%3A!tfa!%7B%7D%3A6712F3A1%3A%3Ac2ln"), "a challenge is not a session")

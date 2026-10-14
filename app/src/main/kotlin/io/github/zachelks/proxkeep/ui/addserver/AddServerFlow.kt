@@ -50,8 +50,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -59,11 +59,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.ServerAddress
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.tls.CertificateInfo
 import io.github.zachelks.proxkeep.data.AuthMethod
 import io.github.zachelks.proxkeep.ui.addserver.AddServerState.Step
+import io.github.zachelks.proxkeep.ui.components.RadioChoices
 import io.github.zachelks.proxkeep.ui.text
 import java.text.DateFormat
 import java.util.Date
@@ -105,6 +107,7 @@ fun AddServerFlow(state: AddServerState, onClose: () -> Unit) {
                     onTicket = state::completeWebSignIn,
                     onPageLost = state::webPageLost,
                     modifier = Modifier.fillMaxSize(),
+                    cookieName = state.product.cookieName,
                 )
             }
             return@Scaffold
@@ -161,12 +164,17 @@ private fun AddressStep(state: AddServerState) {
         text = stringResource(R.string.address_intro),
         style = MaterialTheme.typography.bodyLarge,
     )
+    if (state.isNewServer) {
+        Text(stringResource(R.string.field_product), style = MaterialTheme.typography.titleSmall)
+        val labels = Product.entries.associateWith { stringResource(it.label) }
+        RadioChoices(Product.entries, state.product, label = { labels.getValue(it) }, onSelect = { state.product = it })
+    }
     OutlinedTextField(
         value = state.host,
         onValueChange = { state.host = it },
         label = { Text(stringResource(R.string.field_address)) },
         placeholder = { Text(stringResource(R.string.field_address_placeholder)) },
-        supportingText = { Text(stringResource(R.string.field_address_hint)) },
+        supportingText = { Text(stringResource(R.string.field_address_hint, state.product.defaultPort)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,

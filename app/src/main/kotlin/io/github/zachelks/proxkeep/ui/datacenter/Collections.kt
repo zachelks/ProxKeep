@@ -216,7 +216,7 @@ object Collections {
             titleKeys = listOf("name"), detailKeys = listOf("comment", "server", "mailto", "url"),
             itemPath = "/cluster/notifications/endpoints/$type/{name}", itemParam = "name",
         )
-    }
+    } + backupServerCollections
 
     private fun endpointTitle(type: String): Int = when (type) {
         "sendmail" -> R.string.dc_endpoint_sendmail

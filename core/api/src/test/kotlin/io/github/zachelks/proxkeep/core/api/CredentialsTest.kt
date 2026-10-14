@@ -11,6 +11,9 @@ class CredentialsTest {
     fun theUserIsReadFromATicket() {
         assertEquals("root@pam", TicketCredentials.usernameFromTicket("PVE:root@pam:6712F3A1::c2lnbmF0dXJl"))
         assertEquals("alice@oidc", TicketCredentials.usernameFromTicket("PVE:alice@oidc:6712F3A1::c2ln"))
+        assertEquals("backup@pbs", TicketCredentials.usernameFromTicket("PBS:backup@pbs:6712F3A1::c2ln"))
+        assertEquals("admin@pdm", TicketCredentials.usernameFromTicket("PDM:admin@pdm:6712F3A1::c2ln"))
+        assertNull(TicketCredentials.usernameFromTicket("XYZ:admin@pdm:6712F3A1::c2ln"))
     }
 
     @Test

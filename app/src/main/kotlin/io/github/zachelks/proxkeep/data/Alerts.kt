@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep.data
 
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.PveClient
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import kotlinx.serialization.Serializable
@@ -65,7 +66,8 @@ object AlertChecker {
         kinds: AlertKinds,
     ): Pair<List<Alert>, ServerAlertState> {
         val tasks = if (kinds.failedTasks) client.clusterTasks() else emptyList()
-        val nodes = if (kinds.offlineNodes) client.clusterResources().filter { it.kind == ResourceKind.Node } else emptyList()
+        // Only a Proxmox VE cluster has nodes that go offline; the other products are one server each.
+        val nodes = if (kinds.offlineNodes && profile.product == Product.Pve) client.clusterResources().filter { it.kind == ResourceKind.Node } else emptyList()
 
         val finished = tasks.filter { !it.isRunning && it.endtime != null }
         val newestEnd = finished.maxOfOrNull { it.endtime!! } ?: previous?.lastTaskEnd ?: 0

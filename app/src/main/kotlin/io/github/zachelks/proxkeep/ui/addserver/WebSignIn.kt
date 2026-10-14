@@ -43,6 +43,7 @@ import kotlin.concurrent.thread
  * @param pinnedFingerprint the certificate the server may present when the platform does not trust it
  * @param clientCertAlias the KeyChain certificate to present when the server or its proxy asks for one
  * @param onPageLost called if the page stops working, for example because its process ran out of memory
+ * @param cookieName the cookie the product's login page keeps its ticket in
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -53,13 +54,14 @@ fun WebSignInPage(
     onTicket: (String) -> Unit,
     onPageLost: () -> Unit,
     modifier: Modifier = Modifier,
+    cookieName: String = TicketCredentials.COOKIE_NAME,
 ) {
     val deliver by rememberUpdatedState(onTicket)
     val lost by rememberUpdatedState(onPageLost)
     LaunchedEffect(url) {
         while (true) {
             delay(COOKIE_POLL_MS)
-            val ticket = ticketFromCookies(CookieManager.getInstance().getCookie(url))
+            val ticket = ticketFromCookies(CookieManager.getInstance().getCookie(url), cookieName)
             if (ticket != null) {
                 forgetWebSession()
                 deliver(ticket)
@@ -153,10 +155,10 @@ private fun SslCertificate.toX509(): X509Certificate? {
 }
 
 /** The usable ticket in a `Cookie` header value, or null if the page has not signed in yet. */
-internal fun ticketFromCookies(cookies: String?): String? = cookies
+internal fun ticketFromCookies(cookies: String?, cookieName: String = TicketCredentials.COOKIE_NAME): String? = cookies
     ?.split(';')
     ?.map { it.trim() }
-    ?.firstOrNull { it.startsWith(TicketCredentials.COOKIE_NAME + "=") }
+    ?.firstOrNull { it.startsWith("$cookieName=") }
     ?.substringAfter('=')
     ?.let { URLDecoder.decode(it, "UTF-8") }
     ?.takeIf { TicketCredentials.usernameFromTicket(it) != null }

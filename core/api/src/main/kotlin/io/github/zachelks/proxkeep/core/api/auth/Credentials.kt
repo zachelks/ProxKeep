@@ -21,14 +21,17 @@ data class TicketCredentials(
         /** The name of the cookie the web interface keeps its ticket in. */
         const val COOKIE_NAME = "PVEAuthCookie"
 
+        private val TICKET_PREFIXES = setOf("PVE", "PBS", "PDM")
+
         /**
          * The user a ticket was issued to. Tickets have the form
-         * `PVE:user@realm:hex-time::signature`. Returns null for anything else,
-         * including a second-factor challenge, which is not a usable ticket.
+         * `PVE:user@realm:hex-time::signature`, with `PBS` or `PDM` for the
+         * other products. Returns null for anything else, including a
+         * second-factor challenge, which is not a usable ticket.
          */
         fun usernameFromTicket(ticket: String): String? {
             val parts = ticket.split(':')
-            if (parts.size < 3 || parts[0] != "PVE") return null
+            if (parts.size < 3 || parts[0] !in TICKET_PREFIXES) return null
             val user = parts[1]
             return user.takeIf { '@' in it && !it.startsWith('!') }
         }

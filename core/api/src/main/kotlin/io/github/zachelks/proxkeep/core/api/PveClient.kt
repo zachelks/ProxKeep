@@ -97,8 +97,9 @@ class PveClient(
     private val baseUrl: HttpUrl,
     private val http: OkHttpClient,
     val credentials: Credentials? = null,
+    val product: Product = Product.Pve,
 ) {
-    fun withCredentials(credentials: Credentials?): PveClient = PveClient(baseUrl, http, credentials)
+    fun withCredentials(credentials: Credentials?): PveClient = PveClient(baseUrl, http, credentials, product)
 
     // --- Sign-in ---------------------------------------------------------
 
@@ -145,7 +146,7 @@ class PveClient(
         val raw = execute(post(listOf("access", "ticket"), form, authenticated = false))
         val response = decode(raw, TicketResponse.serializer())
         val ticket = response.ticket
-            ?: ticketFromCookies(raw.setCookies)
+            ?: ticketFromCookies(raw.setCookies, product.cookieName)
             ?: throw PveApiException(raw.code, "The server did not return a ticket")
         val name = response.username ?: userId
         val challenge = TfaChallenge.fromTicket(ticket)
@@ -256,7 +257,7 @@ class PveClient(
      * @throws SchemaUnavailableException when the server does not publish it
      */
     suspend fun apiSchemaText(): String {
-        val url = baseUrl.resolve(SCHEMA_PATH) ?: throw SchemaUnavailableException(0)
+        val url = baseUrl.resolve(product.schemaPath) ?: throw SchemaUnavailableException(0)
         val request = builder(emptyList(), emptyMap(), authenticated = true).url(url).header("Accept", "*/*").get().build()
         val raw = execute(request)
         if (raw.code !in 200..299) throw SchemaUnavailableException(raw.code)
@@ -756,9 +757,15 @@ class PveClient(
 
     // --- Tasks -----------------------------------------------------------
 
-    /** Recent and running tasks across the cluster, newest first. */
-    suspend fun clusterTasks(): List<TaskSummary> =
+    /**
+     * Recent and running tasks across the cluster, newest first. A Backup
+     * Server or Datacenter Manager has no cluster, so its own tasks are read.
+     */
+    suspend fun clusterTasks(): List<TaskSummary> = if (product == Product.Pve) {
         call(get(listOf("cluster", "tasks")), ListSerializer(TaskSummary.serializer()))
+    } else {
+        call(get(listOf("nodes", "localhost", "tasks"), query = mapOf("limit" to TASK_LIST_LIMIT.toString())), ListSerializer(TaskSummary.serializer()))
+    }
 
     suspend fun taskStatus(node: String, upid: String): TaskStatus =
         call(get(listOf("nodes", node, "tasks", upid, "status")), TaskStatus.serializer())
@@ -786,8 +793,8 @@ class PveClient(
             .header("Accept", "application/json")
         if (authenticated) {
             when (val current = credentials) {
-                is TicketCredentials -> request.header("Cookie", "$TICKET_COOKIE=${current.ticket}")
-                is ApiTokenCredentials -> request.header("Authorization", "PVEAPIToken=${current.tokenId}=${current.secret}")
+                is TicketCredentials -> request.header("Cookie", "${product.cookieName}=${current.ticket}")
+                is ApiTokenCredentials -> request.header("Authorization", product.tokenAuthorization(current.tokenId, current.secret))
                 null -> Unit
             }
         }
@@ -897,24 +904,21 @@ class PveClient(
 
     private companion object {
         const val STATUS_OK = 200
-        const val TICKET_COOKIE = "PVEAuthCookie"
 
         const val MAX_DNS_SERVERS = 3
+        const val TASK_LIST_LIMIT = 100
         const val UPLOAD_CHUNK = 64 * 1024
 
         /** After the last byte, the server stores the file before it answers. */
         const val UPLOAD_READ_TIMEOUT_S = 300L
-
-        /** Relative to the API root, `/api2/json/`. */
-        const val SCHEMA_PATH = "../../pve-docs/api-viewer/apidata.js"
         val ENVELOPE = ApiEnvelope.serializer(JsonElement.serializer())
 
         /** Fallback for servers that deliver the ticket only as a cookie. */
-        fun ticketFromCookies(setCookies: List<String>): String? {
+        fun ticketFromCookies(setCookies: List<String>, cookieName: String): String? {
             for (header in setCookies) {
                 val pair = header.substringBefore(';').trim()
                 val name = pair.substringBefore('=')
-                if (name == TICKET_COOKIE || name == "__Host-$TICKET_COOKIE") {
+                if (name == cookieName || name == "__Host-$cookieName") {
                     val value = pair.substringAfter('=', missingDelimiterValue = "")
                     if (value.isEmpty()) continue
                     return try {

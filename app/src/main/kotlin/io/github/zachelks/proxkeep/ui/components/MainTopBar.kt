@@ -45,7 +45,7 @@ fun MainTopBar(
     onOpenConsoles: () -> Unit,
     desktopOpen: Boolean,
     onOpenDesktop: () -> Unit,
-    onSearch: () -> Unit,
+    onSearch: (() -> Unit)?,
     onAddServer: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -73,7 +73,7 @@ fun MainTopBar(
                     }
                 }
             }
-            if (session is Session.Active) {
+            if (session is Session.Active && onSearch != null) {
                 IconButton(onClick = onSearch) {
                     Icon(
                         painter = painterResource(R.drawable.ic_search),

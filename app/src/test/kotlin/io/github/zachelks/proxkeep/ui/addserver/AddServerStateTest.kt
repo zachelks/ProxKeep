@@ -2,6 +2,7 @@ package io.github.zachelks.proxkeep.ui.addserver
 
 import io.github.zachelks.proxkeep.MainDispatcherRule
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.data.AuthMethod
@@ -147,6 +148,35 @@ class AddServerStateTest {
         assertEquals("root@pam!app", saved.principal)
         assertEquals(fixture.server.hostName, saved.name, "an unnamed server is named after its host")
         assertEquals(saved.id, assertIs<Session.Active>(repository.session.value).profile.id)
+    }
+
+    @Test
+    fun aBackupServerIsSavedAsOne(): Unit = runBlocking {
+        val authorizations = mutableListOf<String?>()
+        fixture.route("/version") { request ->
+            authorizations += request.getHeader("Authorization")
+            response("""{"data":{"version":"4.2"}}""")
+        }
+        fixture.route("/access/domains", """{"data":$REALMS}""")
+        val state = newServer()
+        repository.loaded.first { it }
+        state.product = Product.Pbs
+        state.host = address
+        state.submitAddress()
+        state.awaitIdle()
+        state.trustCertificate()
+        state.awaitIdle()
+
+        state.method = AuthMethod.ApiToken
+        state.tokenId = "root@pam!app"
+        state.tokenSecret = "s3cret"
+        state.submitSignIn()
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        assertEquals(Product.Pbs, storage.read().profiles.single().product)
+        assertEquals("PBSAPIToken=root@pam!app:s3cret", authorizations.last())
+        assertEquals(Product.Pbs, assertIs<Session.Active>(repository.session.value).client.product)
     }
 
     @Test

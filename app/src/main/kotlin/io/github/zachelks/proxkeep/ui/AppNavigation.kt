@@ -11,28 +11,30 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.ui.addserver.AddServerFlow
 import io.github.zachelks.proxkeep.ui.addserver.AddServerViewModel
-import io.github.zachelks.proxkeep.ui.console.TerminalScreen
-import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
-import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.ui.backupjobs.BackupJobsScreen
+import io.github.zachelks.proxkeep.ui.backupserver.BackupGroupScreen
+import io.github.zachelks.proxkeep.ui.backupserver.DatastoreScreen
 import io.github.zachelks.proxkeep.ui.config.GuestConfigScreen
+import io.github.zachelks.proxkeep.ui.console.TerminalScreen
 import io.github.zachelks.proxkeep.ui.create.CreateGuestScreen
 import io.github.zachelks.proxkeep.ui.datacenter.CephScreen
 import io.github.zachelks.proxkeep.ui.datacenter.CollectionScreen
 import io.github.zachelks.proxkeep.ui.datacenter.DatacenterScreen
-import io.github.zachelks.proxkeep.ui.nodes.NodeScreen
-import io.github.zachelks.proxkeep.ui.schema.SchemaEditRequest
-import io.github.zachelks.proxkeep.ui.schema.SchemaEditScreen
-import io.github.zachelks.proxkeep.ui.storage.StorageScreen
+import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.BackupsScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.SnapshotsScreen
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.navigation.rememberBackStack
+import io.github.zachelks.proxkeep.ui.nodes.NodeScreen
+import io.github.zachelks.proxkeep.ui.schema.SchemaEditRequest
+import io.github.zachelks.proxkeep.ui.schema.SchemaEditScreen
 import io.github.zachelks.proxkeep.ui.settings.ExtraKeysScreen
 import io.github.zachelks.proxkeep.ui.settings.SettingsScreen
+import io.github.zachelks.proxkeep.ui.storage.StorageScreen
 
 /**
  * The app's screens and the way between them. Each screen on the back stack
@@ -87,6 +89,10 @@ fun AppNavigation() {
             }
             entry<Route.Datacenter> { DatacenterScreen(onClose = { navigator.close(Route.Datacenter) }, onOpenRoute = navigator::open) }
             entry<Route.Ceph> { CephScreen(onClose = { navigator.close(Route.Ceph) }, onOpenRoute = navigator::open) }
+            entry<Route.Datastore> { route -> DatastoreScreen(route.store, onClose = { navigator.close(route) }, onOpenRoute = navigator::open) }
+            entry<Route.BackupGroup> { route ->
+                BackupGroupScreen(route.store, route.ns, route.type, route.id, onClose = { navigator.close(route) })
+            }
             entry<Route.Collection> { route ->
                 CollectionScreen(route.specId, route.args, route.title, onClose = { navigator.close(route) }, onOpenRoute = navigator::open)
             }

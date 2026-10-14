@@ -11,6 +11,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import io.github.zachelks.proxkeep.ProxKeepApplication
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.data.Alert
 import io.github.zachelks.proxkeep.data.AlertChecker
 import io.github.zachelks.proxkeep.data.AlertInterval
@@ -66,10 +67,13 @@ class StatusWorker(context: Context, parameters: WorkerParameters) : CoroutineWo
             return alerts
         }
 
-        /** The signed-in server's status, or null when no server is saved. A server that cannot be reached keeps its last status. */
+        /**
+         * The signed-in server's status, or null when no server is saved. A server that cannot be reached keeps its last status.
+         * Only a Proxmox VE cluster has the nodes and guests the widget counts.
+         */
         suspend fun snapshot(servers: ServerRepository): StatusSnapshot? {
             servers.loaded.first { it }
-            val profile = servers.servers.value.active ?: return null
+            val profile = servers.servers.value.active?.takeIf { it.product == Product.Pve } ?: return null
             return try {
                 val client = servers.backgroundClient(profile) ?: return null
                 StatusSnapshot.of(profile, client.clusterResources(), System.currentTimeMillis())

@@ -2,7 +2,9 @@ package io.github.zachelks.proxkeep.core.api.model
 
 import io.github.zachelks.proxkeep.core.api.json.LenientIntSerializer
 import io.github.zachelks.proxkeep.core.api.json.LenientLongSerializer
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNames
 
 private const val EXIT_OK = "OK"
 private const val EXIT_WARNINGS = "WARNINGS"
@@ -18,11 +20,15 @@ private const val EXIT_WARNINGS = "WARNINGS"
  * @property endtime seconds since the epoch; absent while the task runs
  * @property status `OK`, a warning count, or an error message; absent while the task runs
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class TaskSummary(
     val upid: String,
     val node: String,
+    // A Backup Server and a Datacenter Manager name these two worker_type and worker_id.
+    @JsonNames("worker_type")
     val type: String,
+    @JsonNames("worker_id")
     val id: String? = null,
     val user: String? = null,
     @Serializable(with = LenientLongSerializer::class)
