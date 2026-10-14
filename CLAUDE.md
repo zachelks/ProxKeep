@@ -30,7 +30,7 @@ Nothing has an instrumented test or emulator setup. Behavior on a device and aga
 
 App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that works:
 
-- Plain JVM for code without Android types: repositories, view models, `AddServerState`, `Navigator`, `AppLock`. View model tests use `MainDispatcherRule`, which moves the main dispatcher to background threads. Cancel `viewModelScope` in teardown.
+- Plain JVM for code without Android types: repositories, view models, `AddServerState`, `Navigator`, `AppLock`. View model tests use `MainDispatcherRule`, which moves the main dispatcher to background threads. Cancel `viewModelScope` in teardown. Don't use the rule in Compose tests: Compose needs the real main thread, which Robolectric provides.
 - Robolectric (`@RunWith(RobolectricTestRunner::class)`) for code that needs the Android framework or the app's resources: `ProfileStore`, `AppSettings`, the console classes, and anything that takes a `Context`.
 - Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`.
 
@@ -50,14 +50,17 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - Every request for the signed-in server goes through `ServerRepository.request { client -> … }`. It is the one place that handles rejected credentials (it signs the session out), and it throws `NotSignedInException` when nothing is signed in. Don't read `Session.Active.client` directly for requests.
 - `activeProfileId` changes only when the server or sign-in changes, not on ticket renewal. Loaders `flatMapLatest` on it, so a server switch cancels in-flight loads and data from one server is never shown under another.
 - `PveClient` is immutable. `withCredentials` returns a new client, and ticket renewal (every 30 minutes) swaps the client inside `Session.Active`.
-- Login tickets live only in memory. API token secrets are encrypted by `SecretBox` with an Android Keystore AES-GCM key.
+- Login tickets live only in memory. API token secrets, reverse proxy header values and opt-in saved passwords are encrypted by `SecretBox` with an Android Keystore AES-GCM key.
+- `Session.SigningIn` means the app is signing in with a saved password, on start or after the session expired. A password the server rejects is forgotten at once, so retries never lock an account. Signing out forgets it too.
+- Sign-in methods (`AuthMethod`): password with TOTP or recovery codes, API token, and `Web`, the server's own login page in a WebView (`ui/addserver/WebSignIn.kt`) for security keys and OpenID Connect. The app takes the page's `PVEAuthCookie`, renews it once to get a CSRF token, and clears the WebView's cookies.
+- Reverse proxies: a profile can carry extra headers and a KeyChain client certificate alias. `ConnectionOptions` (core:api) adds the headers to every request, including the console websocket, without replacing the session's own credentials. `ServerTrust` presents the client certificate.
 - `ServerRepository` depends on the `ProfileStorage` and `SecretCipher` interfaces (`data/Storage.kt`), so it and the loaders are unit-tested on the JVM against `PinnedServer` (see Tests above).
 
-**TLS.** `ServerTrust` accepts a certificate only if the platform trusts it or its SHA-256 fingerprint matches the profile's pin. Each server gets a copy of the shared OkHttp client carrying its own trust settings. `probeServer` makes first contact and reports an untrusted certificate rather than sending anything. Never add a trust-all path.
+**TLS.** `ServerTrust` accepts a certificate only if the platform trusts it or its SHA-256 fingerprint matches the profile's pin. Each server gets a copy of the shared OkHttp client carrying its own trust settings. `probeServer` makes first contact and reports an untrusted certificate rather than sending anything. The web sign-in WebView applies the same rule in `onReceivedSslError`. Never add a trust-all path.
 
 **Data loading.** Live data loads only while a screen collects it: loaders are `StateFlow`s built with `stateIn(…, WhileSubscribed(5 s))`, and screens collect with `collectAsStateWithLifecycle`, so nothing loads in the background or behind the app lock.
 - `RefreshSignal.ticks()` paces every loader: at once, every 10 s, and whenever `request()` is called (the refresh button, a finished power action).
-- `ClusterRepository` holds the one `/cluster/resources` call that feeds Overview, Guests and Infrastructure.
+- `ClusterRepository` holds the one `/cluster/resources` call that feeds Overview, Guests, Infrastructure and search.
 - `ServerAccessRepository` holds the server version and the credentials' permissions (`/access/permissions`). Use `ServerAccess.allows(paths, privilege)` to decide whether to offer an action; it allows everything while permissions are unknown, because the server enforces them anyway. `Permissions.guestPaths` includes the guest's pool.
 - `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`.
 
@@ -66,7 +69,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - Settings, sign-in and the terminal are routes pushed over `Main`. Each route gets its own `ViewModelStore`, cleared when the route is closed.
 - Routes hold IDs, never data, because they are serialized with the back stack.
 
-**View models.** One per feature: `ShellViewModel` (server menu, refresh, action messages), `ClusterViewModel` (Overview, Infrastructure), `GuestsViewModel` (list, detail, actions), `TasksViewModel` (list, log follower), `AddServerViewModel` (sign-in flow). Polling and other data logic belong in the view model or a repository, not in composables. Guests and Tasks use Material 3 adaptive list-detail panes; the pane tells the view model what is selected.
+**View models.** One per feature: `ShellViewModel` (server menu, refresh, action messages), `ClusterViewModel` (Overview, Infrastructure), `GuestsViewModel` (list, detail, usage history, actions), `TasksViewModel` (list, log follower), `SearchViewModel` (search overlay), `AddServerViewModel` (sign-in flow). Polling and other data logic belong in the view model or a repository, not in composables. Guests and Tasks use Material 3 adaptive list-detail panes; the pane tells the view model what is selected.
 
 **App lock.** `AppLock` holds the timing rules and has no Android dependencies, so it is unit-tested. `ProcessLifecycleOwner` drives it from `ProxKeepApplication`. While the app is locked, `AppRoot` composes only `LockScreen`, so nothing behind the lock fetches or shows data. `MainActivity` is a `FragmentActivity` because `BiometricPrompt` requires one.
 
@@ -80,6 +83,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - User-facing text lives in `app/src/main/res/values/strings.xml`. Use `<plurals>` for counts. `UiMessage` carries string resources out of the view model.
 - Write user-facing text, commit messages and pull request descriptions in plain, short sentences. Commits have an imperative subject and a body explaining why. Pull request bodies have the sections "What's included", "Checks", "How to test" and "Known limits".
 - Status colors are always paired with an icon or label (`ui/theme/StatusColors.kt`). Graceful shutdown stays visually and spatially separate from stop and reset, which ask for confirmation.
+- Charts (`ui/components/UsageChart.kt`) show one measure on one scale, at most two series, in the fixed colors from `ui/theme/ChartColors.kt`, with a text description for screen readers. Never put two scales on one chart.
 - Proxmox returns loosely typed JSON, such as `0`/`1` booleans and numbers as strings. Use the serializers in `core/api/json/LenientSerializers.kt` for new model fields.
 - Licensing: the app is GPLv3 because the Termux code is GPLv3 only. ProxKeep's own code is GPLv3-or-later. Don't use the Proxmox name or logo as the app's name or icon.
 
@@ -90,19 +94,13 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 
 ## Milestone progress
 
-**Milestone 1, Foundation.** Mostly done. Server profiles, password and TOTP sign-in, API tokens, TLS pinning, app lock, Overview, the guest list and detail, power actions, task tracking, and hiding power, console and shell actions the user lacks permission for all work.
+**Milestone 1, Foundation.** Done in code. Server profiles, password and TOTP sign-in, API tokens, web sign-in for security keys and OpenID Connect, reverse proxy headers and client certificates, opt-in saved passwords, TLS pinning, app lock, Overview, the guest list and detail with usage charts, search, power actions, task tracking, and hiding actions the user lacks permission for.
 
-Still missing from milestone 1:
-- WebAuthn and OpenID Connect web sign-in
-- custom headers and client certificates for reverse proxies
-- opt-in saved passwords
-- global search
-- usage charts
+Not yet confirmed against a real server:
+- Console with an API token.
+- Web sign-in. Security keys in the WebView need the server's domain to publish Digital Asset Links for the app. Without that, a security-key account signs in with a password and code, or an API token.
 
-Of the three prototypes the spec puts first:
-- Console with an API token: built, but not yet confirmed against a real server.
-- WebAuthn in an in-app browser: not started.
-- VNC over the websocket: not started.
+Of the three prototypes the spec puts first, VNC over the websocket is not started.
 
 **Milestone 2, Terminal.** In progress. Done: the websocket session layer, the extra-keys row with sticky modifiers, hardware keyboard, pinch zoom, selection, copy and paste.
 
