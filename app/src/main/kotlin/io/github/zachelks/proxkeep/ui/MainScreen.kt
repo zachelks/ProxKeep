@@ -113,7 +113,7 @@ fun MainScreen(navigator: Navigator) {
                     else -> Scaffold(topBar = { topBar(stringResource(destination.label)) }) { innerPadding ->
                         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                             when {
-                                !loaded -> CenteredProgress()
+                                !loaded || session is Session.SigningIn -> CenteredProgress()
                                 session == Session.None -> MessageWithAction(
                                     message = stringResource(destination.emptyMessage),
                                     actionLabel = stringResource(R.string.action_add_server),

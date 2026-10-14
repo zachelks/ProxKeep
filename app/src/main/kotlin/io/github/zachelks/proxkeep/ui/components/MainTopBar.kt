@@ -90,9 +90,11 @@ private fun ServerMenu(
     val current: ServerProfile? = when (session) {
         is Session.Active -> session.profile
         is Session.SignedOut -> session.profile
+        is Session.SigningIn -> session.profile
         Session.None -> null
     }
-    val canSignOut = session is Session.Active && session.client.credentials is TicketCredentials
+    val canSignOut = session is Session.Active && session.client.credentials is TicketCredentials ||
+        session is Session.SigningIn
 
     // The Box anchors the menu to the button that opens it.
     Box {

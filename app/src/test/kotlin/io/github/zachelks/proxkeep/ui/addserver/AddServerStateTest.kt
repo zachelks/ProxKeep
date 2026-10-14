@@ -211,6 +211,35 @@ class AddServerStateTest {
     }
 
     @Test
+    fun aPasswordIsSavedWhenThePersonAsks(): Unit = runBlocking {
+        fixture.route("/access/ticket", """{"data":{"username":"root@pam","ticket":"$TICKET","CSRFPreventionToken":"csrf"}}""")
+        val state = trustedAtSignIn()
+
+        state.username = "root"
+        state.password = "password"
+        state.savePassword = true
+        state.submitSignIn()
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        assertEquals("password", repository.savedPassword(storage.read().profiles.single()))
+    }
+
+    @Test
+    fun aSavedPasswordIsFilledInWhenSigningInAgain(): Unit = runBlocking {
+        fixture.route("/access/domains", """{"data":$REALMS}""")
+        fixture.route("/access/ticket", """{"data":{"username":"root@pam","ticket":"$TOTP_CHALLENGE"}}""")
+        val saved = fixture.profile.copy(authMethod = AuthMethod.Password, principal = "root@pam", encryptedPassword = "plain:pw")
+        storage.write(StoredServers(listOf(saved), saved.id))
+
+        val viewModel = AddServerViewModel(startedRepository(), saved.id)
+        viewModel.state.awaitIdle()
+
+        assertEquals("pw", viewModel.state.password)
+        assertTrue(viewModel.state.savePassword)
+    }
+
+    @Test
     fun aRejectedPasswordStaysOnSignIn(): Unit = runBlocking {
         fixture.route("/access/ticket", """{"data":null}""", code = 401)
         val state = trustedAtSignIn()

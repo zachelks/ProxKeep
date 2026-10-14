@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -48,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -399,8 +402,17 @@ private fun SignInStep(state: AddServerState) {
                 keyboardActions = KeyboardActions(onDone = { state.submitSignIn() }),
                 modifier = Modifier.fillMaxWidth(),
             )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(value = state.savePassword, role = Role.Checkbox, onValueChange = { state.savePassword = it }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = state.savePassword, onCheckedChange = null)
+                Text(stringResource(R.string.save_password), modifier = Modifier.padding(start = 12.dp))
+            }
             Text(
-                text = stringResource(R.string.password_not_stored),
+                text = stringResource(if (state.savePassword) R.string.password_saved_explained else R.string.password_not_stored),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

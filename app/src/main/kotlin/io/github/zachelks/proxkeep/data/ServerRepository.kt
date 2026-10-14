@@ -7,6 +7,7 @@ import io.github.zachelks.proxkeep.core.api.PveClient
 import io.github.zachelks.proxkeep.core.api.ServerAddress
 import io.github.zachelks.proxkeep.core.api.auth.ApiTokenCredentials
 import io.github.zachelks.proxkeep.core.api.auth.Credentials
+import io.github.zachelks.proxkeep.core.api.auth.LoginResult
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.probeServer
 import io.github.zachelks.proxkeep.core.api.tls.ServerTrust
@@ -39,6 +40,9 @@ sealed interface Session {
     /** A server is selected but there are no usable credentials for it. */
     data class SignedOut(val profile: ServerProfile) : Session
 
+    /** Signing in with the password saved for [profile]. Ends as [Active] or [SignedOut]. */
+    data class SigningIn(val profile: ServerProfile) : Session
+
     data class Active(val profile: ServerProfile, val client: PveClient) : Session
 }
 
@@ -48,9 +52,10 @@ class NotSignedInException : IOException("Not signed in")
 /**
  * Owns the saved servers and the current session.
  *
- * Login tickets are kept in memory only, so a password sign-in lasts until
- * the app's process ends. API token sessions are restored on start from the
- * encrypted secret.
+ * Login tickets are kept in memory only. API token sessions are restored on
+ * start from the encrypted secret. A server with a saved password signs in
+ * again on start and when its session expires, unless the account needs a
+ * second factor.
  */
 class ServerRepository(
     private val store: ProfileStorage,
@@ -61,6 +66,7 @@ class ServerRepository(
 ) {
     private val mutex = Mutex()
     private var renewalJob: Job? = null
+    private var signInJob: Job? = null
 
     private val _servers = MutableStateFlow(StoredServers())
     val servers: StateFlow<StoredServers> = _servers.asStateFlow()
@@ -86,7 +92,7 @@ class ServerRepository(
             mutex.withLock {
                 val stored = store.read()
                 _servers.value = stored
-                _session.value = restoreSession(stored.active)
+                setSession(restoreSession(stored.active))
                 _loaded.value = true
             }
         }
@@ -156,17 +162,26 @@ class ServerRepository(
 
     /**
      * Saves [profile], replacing one with the same ID, and starts a session
-     * with [credentials]. [headers] are stored encrypted with the profile.
+     * with [credentials]. [headers] are stored encrypted with the profile,
+     * and so is [savedPassword] for a password sign-in, if given.
      */
     @Throws(IOException::class)
-    suspend fun saveAndActivate(profile: ServerProfile, credentials: Credentials, headers: List<HttpHeader> = emptyList()) {
+    suspend fun saveAndActivate(
+        profile: ServerProfile,
+        credentials: Credentials,
+        headers: List<HttpHeader> = emptyList(),
+        savedPassword: String? = null,
+    ) {
         mutex.withLock {
             val withHeaders = profile.copy(
                 encryptedHeaders = if (headers.isEmpty()) null else encrypt(headerJson.encodeToString(HEADER_LIST, headers)),
             )
             val toStore = when (credentials) {
-                is ApiTokenCredentials -> withHeaders.copy(encryptedSecret = encrypt(credentials.secret))
-                is TicketCredentials -> withHeaders.copy(encryptedSecret = null)
+                is ApiTokenCredentials -> withHeaders.copy(encryptedSecret = encrypt(credentials.secret), encryptedPassword = null)
+                is TicketCredentials -> withHeaders.copy(
+                    encryptedSecret = null,
+                    encryptedPassword = savedPassword?.let { encrypt(it) },
+                )
             }
             val current = _servers.value.profiles
             val profiles = if (current.any { it.id == toStore.id }) {
@@ -202,11 +217,24 @@ class ServerRepository(
         }
     }
 
-    /** Drops the current credentials. The server stays in the list. */
+    /** The password saved for [profile], or null if there is none or it cannot be decrypted here. */
+    fun savedPassword(profile: ServerProfile): String? = profile.encryptedPassword?.let(secrets::decrypt)
+
+    /** Drops the current credentials and any saved password. The server stays in the list. */
     suspend fun signOut() {
         mutex.withLock {
-            val active = _session.value as? Session.Active ?: return
-            setSession(Session.SignedOut(active.profile))
+            val profile = when (val current = _session.value) {
+                is Session.Active -> current.profile
+                is Session.SigningIn -> current.profile
+                else -> return
+            }
+            // Signing out never fails, even if the saved password cannot be removed from storage now.
+            val updated = try {
+                forgetPassword(profile)
+            } catch (e: IOException) {
+                profile
+            }
+            setSession(Session.SignedOut(updated))
         }
     }
 
@@ -214,14 +242,72 @@ class ServerRepository(
     suspend fun sessionExpired(profileId: String) {
         mutex.withLock {
             val active = _session.value as? Session.Active ?: return
-            if (active.profile.id == profileId) setSession(Session.SignedOut(active.profile))
+            if (active.profile.id != profileId) return
+            val canSignInAgain = active.profile.authMethod == AuthMethod.Password && active.profile.encryptedPassword != null
+            setSession(if (canSignInAgain) Session.SigningIn(active.profile) else Session.SignedOut(active.profile))
         }
     }
 
     private fun sessionProfileId(): String? = when (val current = _session.value) {
         is Session.Active -> current.profile.id
         is Session.SignedOut -> current.profile.id
+        is Session.SigningIn -> current.profile.id
         Session.None -> null
+    }
+
+    /** Removes the saved password from [profile] and storage. Returns the updated profile. */
+    private suspend fun forgetPassword(profile: ServerProfile): ServerProfile {
+        if (profile.encryptedPassword == null) return profile
+        val updated = profile.copy(encryptedPassword = null)
+        persist(_servers.value.copy(profiles = _servers.value.profiles.map { if (it.id == profile.id) updated else it }))
+        return updated
+    }
+
+    /**
+     * Signs in to [profile] with its saved password. The outcome replaces
+     * the session only if it is still waiting for this sign-in.
+     */
+    private suspend fun signInWithSavedPassword(profile: ServerProfile) {
+        var rejected = false
+        val next: Session = try {
+            val password = withContext(Dispatchers.IO) { savedPassword(profile) }
+            val headers = withContext(Dispatchers.IO) { savedHeaders(profile) }
+            if (password == null || headers == null) {
+                Session.SignedOut(profile)
+            } else {
+                val client = newClient(profile.address, profile.pinnedSha256, connectionOptions(headers, profile.clientCertAlias))
+                when (val result = client.login(profile.principal.substringBeforeLast('@'), profile.principal.substringAfterLast('@'), password)) {
+                    is LoginResult.Success -> Session.Active(profile, client.withCredentials(result.credentials))
+                    // The person has to enter the code; the sign-in screen starts with the saved password.
+                    is LoginResult.SecondFactorRequired -> Session.SignedOut(profile)
+                }
+            }
+        } catch (e: PveApiException) {
+            rejected = e.isAuthenticationFailure
+            Session.SignedOut(profile)
+        } catch (e: IOException) {
+            Session.SignedOut(profile)
+        } catch (e: IllegalArgumentException) {
+            Session.SignedOut(profile)
+        }
+        mutex.withLock {
+            val now = _session.value
+            if (now !is Session.SigningIn || now.profile.id != profile.id) return
+            signInJob = null
+            // A password the server refuses is not tried again, so an account is never locked out by retries.
+            val outcome = if (rejected) {
+                Session.SignedOut(
+                    try {
+                        forgetPassword(profile)
+                    } catch (e: IOException) {
+                        profile
+                    },
+                )
+            } else {
+                next
+            }
+            setSession(outcome)
+        }
     }
 
     private suspend fun persist(next: StoredServers) {
@@ -239,6 +325,7 @@ class ServerRepository(
 
     private suspend fun restoreSession(profile: ServerProfile?): Session {
         if (profile == null) return Session.None
+        if (profile.authMethod == AuthMethod.Password && profile.encryptedPassword != null) return Session.SigningIn(profile)
         val encrypted = profile.encryptedSecret
         if (profile.authMethod == AuthMethod.ApiToken && encrypted != null) {
             val secret = withContext(Dispatchers.IO) { secrets.decrypt(encrypted) }
@@ -261,8 +348,13 @@ class ServerRepository(
         _session.value = next
         renewalJob?.cancel()
         renewalJob = null
+        signInJob?.cancel()
+        signInJob = null
         if (next is Session.Active && next.client.credentials is TicketCredentials) {
             renewalJob = scope.launch { keepTicketFresh(next.profile.id) }
+        }
+        if (next is Session.SigningIn) {
+            signInJob = scope.launch { signInWithSavedPassword(next.profile) }
         }
     }
 

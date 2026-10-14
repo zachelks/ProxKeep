@@ -360,4 +360,8 @@
     <string name="action_remove_certificate">Remove</string>
     <string name="error_invalid_header">A header has a name or value that can\'t be sent. Names use letters, digits and dashes; values use plain ASCII.</string>
     <string name="error_client_certificate_unavailable">The client certificate is no longer available. Choose it again.</string>
+
+    <!-- Saved passwords -->
+    <string name="save_password">Save password on this device</string>
+    <string name="password_saved_explained">The password is stored encrypted on this device. The app uses it to sign in again by itself. Accounts with a second factor still ask for the code.</string>
 </resources>

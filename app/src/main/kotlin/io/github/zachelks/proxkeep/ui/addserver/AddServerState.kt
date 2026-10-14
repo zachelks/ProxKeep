@@ -36,12 +36,14 @@ import java.util.UUID
  *
  * @param existing the saved server being signed in to, or null to add a new one
  * @param existingHeaders the reverse proxy headers saved with [existing]
+ * @param existingPassword the password saved for [existing], if the person chose to save it
  */
 class AddServerState(
     private val repository: ServerRepository,
     private val scope: CoroutineScope,
     private val existing: ServerProfile?,
     existingHeaders: List<HttpHeader> = emptyList(),
+    existingPassword: String? = null,
 ) {
     enum class Step { Address, Certificate, SignIn, SecondFactor, Done }
 
@@ -77,7 +79,10 @@ class AddServerState(
     var method by mutableStateOf(existing?.authMethod ?: AuthMethod.Password)
     var username by mutableStateOf(passwordPrincipal()?.substringBeforeLast('@').orEmpty())
     var realm by mutableStateOf(passwordPrincipal()?.substringAfterLast('@') ?: DEFAULT_REALM)
-    var password by mutableStateOf("")
+    var password by mutableStateOf(existingPassword.orEmpty())
+
+    /** Whether to keep the password, encrypted, so the app can sign in again by itself. */
+    var savePassword by mutableStateOf(existing?.encryptedPassword != null)
     var tokenId by mutableStateOf(existing?.takeIf { it.authMethod == AuthMethod.ApiToken }?.principal.orEmpty())
     var tokenSecret by mutableStateOf("")
 
@@ -90,6 +95,7 @@ class AddServerState(
     private var address: ServerAddress? = null
     private var options = ConnectionOptions()
     private var acceptedHeaders: List<HttpHeader> = emptyList()
+    private var passwordToSave: String? = null
     private var pin: String? = existing?.pinnedSha256
     private var challenge: TfaChallenge? = null
     private var challengeUser: String? = null
@@ -195,6 +201,7 @@ class AddServerState(
                     error = UiMessage(R.string.error_missing_credentials)
                     return
                 }
+                passwordToSave = secret.takeIf { savePassword }
                 launch {
                     val client = repository.newClient(target, pin, options)
                     when (val result = client.login(user, realm, secret)) {
@@ -266,7 +273,7 @@ class AddServerState(
             principal = principal,
             clientCertAlias = clientCertAlias,
         )
-        repository.saveAndActivate(profile, credentials, acceptedHeaders)
+        repository.saveAndActivate(profile, credentials, acceptedHeaders, passwordToSave.takeIf { method == AuthMethod.Password })
         clearSecrets()
         step = Step.Done
     }
@@ -303,6 +310,7 @@ class AddServerState(
         headers = emptyList()
         acceptedHeaders = emptyList()
         options = ConnectionOptions()
+        passwordToSave = null
         password = ""
         tokenSecret = ""
         code = ""

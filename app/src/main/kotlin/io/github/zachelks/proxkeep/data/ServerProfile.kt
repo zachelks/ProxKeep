@@ -9,8 +9,9 @@ enum class AuthMethod { Password, ApiToken }
 /**
  * A saved server.
  *
- * Passwords are never stored. For API tokens the secret is stored encrypted
- * in [encryptedSecret].
+ * Passwords are stored only when the person chooses to, encrypted in
+ * [encryptedPassword]. For API tokens the secret is stored encrypted in
+ * [encryptedSecret].
  */
 @Serializable
 data class ServerProfile(
@@ -29,6 +30,8 @@ data class ServerProfile(
     val encryptedHeaders: String? = null,
     /** Android KeyChain alias of the client certificate a reverse proxy asks for. */
     val clientCertAlias: String? = null,
+    /** The password, encrypted, only when the person chose to save it. */
+    val encryptedPassword: String? = null,
 ) {
     val address: ServerAddress
         get() = ServerAddress(host, port)

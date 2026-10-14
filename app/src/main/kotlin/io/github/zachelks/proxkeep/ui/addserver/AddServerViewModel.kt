@@ -18,6 +18,7 @@ class AddServerViewModel(repository: ServerRepository, profileId: String?) : Vie
         viewModelScope,
         existing,
         existingHeaders = existing?.let(repository::savedHeaders).orEmpty(),
+        existingPassword = existing?.let(repository::savedPassword),
     )
 
     init {
