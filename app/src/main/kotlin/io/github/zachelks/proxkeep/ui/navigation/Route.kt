@@ -53,6 +53,24 @@ sealed interface Route {
     @Serializable
     data object CreateContainer : Route
 
+    /** One node's management screen. */
+    @Serializable
+    data class Node(val node: String) : Route
+
+    /**
+     * A form built from the server's schema for one API object.
+     * See [io.github.zachelks.proxkeep.ui.schema.SchemaEditRequest].
+     */
+    @Serializable
+    data class SchemaEdit(
+        val title: String,
+        val path: String,
+        val schemaPath: String,
+        val method: String,
+        val exclude: List<String> = emptyList(),
+        val presets: Map<String, String> = emptyMap(),
+    ) : Route
+
     /** The open remote desktop. */
     @Serializable
     data object Desktop : Route

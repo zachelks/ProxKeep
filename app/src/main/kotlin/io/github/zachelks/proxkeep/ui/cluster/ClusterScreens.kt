@@ -35,6 +35,7 @@ import io.github.zachelks.proxkeep.core.api.model.VersionInfo
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.ServerProfile
 import io.github.zachelks.proxkeep.ui.appContainer
+import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.components.CenteredProgress
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
@@ -107,12 +108,12 @@ private fun SectionTitle(text: String) {
 // --- Overview ----------------------------------------------------------------
 
 @Composable
-fun OverviewRoute(profile: ServerProfile) {
+fun OverviewRoute(profile: ServerProfile, onOpenRoute: (Route) -> Unit = {}) {
     val viewModel = clusterViewModel()
     val cluster by viewModel.cluster.collectAsStateWithLifecycle()
     val access by viewModel.access.collectAsStateWithLifecycle()
     ClusterContent(state = cluster, onRetry = viewModel::retry) { loaded ->
-        OverviewScreen(profile = profile, state = loaded, version = access?.version)
+        OverviewScreen(profile = profile, state = loaded, version = access?.version, onOpenNode = { onOpenRoute(Route.Node(it)) })
     }
 }
 
@@ -122,6 +123,7 @@ fun OverviewScreen(
     state: ClusterState.Loaded,
     version: VersionInfo?,
     modifier: Modifier = Modifier,
+    onOpenNode: (node: String) -> Unit = {},
 ) {
     val nodes = state.resources.filter { it.kind == ResourceKind.Node }.sortedBy { it.node }
     val guests = state.resources.filter { it.isGuest && !it.isTemplate }
@@ -167,14 +169,14 @@ fun OverviewScreen(
                 )
             }
         }
-        items(nodes, key = { it.id }) { node -> NodeCard(node) }
+        items(nodes, key = { it.id }) { node -> NodeCard(node, onClick = { node.node?.let(onOpenNode) }) }
     }
 }
 
 @Composable
-private fun NodeCard(node: ClusterResource) {
+private fun NodeCard(node: ClusterResource, onClick: () -> Unit) {
     val status = node.statusText()
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -225,7 +227,7 @@ private fun usedOfTotal(used: Long?, total: Long?): String =
 
 /** @param onConsoleOpened called after a node shell has been opened, to show it */
 @Composable
-fun InfrastructureRoute(onConsoleOpened: () -> Unit) {
+fun InfrastructureRoute(onConsoleOpened: () -> Unit, onOpenRoute: (Route) -> Unit = {}) {
     val viewModel = clusterViewModel()
     val cluster by viewModel.cluster.collectAsStateWithLifecycle()
     val access by viewModel.access.collectAsStateWithLifecycle()
@@ -239,6 +241,7 @@ fun InfrastructureRoute(onConsoleOpened: () -> Unit) {
                 viewModel.openNodeShell(node)
                 onConsoleOpened()
             },
+            onOpenNode = { node -> onOpenRoute(Route.Node(node)) },
         )
     }
 }
@@ -249,6 +252,7 @@ fun InfrastructureScreen(
     canOpenShell: (node: String) -> Boolean,
     onOpenShell: (node: String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenNode: (node: String) -> Unit = {},
 ) {
     val nodes = state.resources.filter { it.kind == ResourceKind.Node }.sortedBy { it.node }
     val storages = state.resources
@@ -267,7 +271,7 @@ fun InfrastructureScreen(
         item(key = "nodes-title") { SectionTitle(stringResource(R.string.section_nodes)) }
         items(nodes, key = { it.id }) { node ->
             val status = node.statusText()
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            OutlinedCard(onClick = { node.node?.let(onOpenNode) }, modifier = Modifier.fillMaxWidth()) {
                 ListItem(
                     headlineContent = { Text(node.node ?: node.id) },
                     supportingContent = {

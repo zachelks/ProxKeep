@@ -18,6 +18,9 @@ import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.ui.config.GuestConfigScreen
 import io.github.zachelks.proxkeep.ui.create.CreateGuestScreen
+import io.github.zachelks.proxkeep.ui.nodes.NodeScreen
+import io.github.zachelks.proxkeep.ui.schema.SchemaEditRequest
+import io.github.zachelks.proxkeep.ui.schema.SchemaEditScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.BackupsScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.SnapshotsScreen
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
@@ -63,6 +66,21 @@ fun AppNavigation() {
             entry<Route.Backups> { route -> BackupsScreen(route.resourceId, onClose = { navigator.close(route) }) }
             entry<Route.CreateVm> { CreateGuestScreen(ResourceKind.Qemu, onClose = { navigator.close(Route.CreateVm) }) }
             entry<Route.CreateContainer> { CreateGuestScreen(ResourceKind.Lxc, onClose = { navigator.close(Route.CreateContainer) }) }
+            entry<Route.Node> { route ->
+                NodeScreen(
+                    node = route.node,
+                    onClose = { navigator.close(route) },
+                    onConsoleOpened = { navigator.open(Route.Terminal) },
+                    onOpenRoute = navigator::open,
+                )
+            }
+            entry<Route.SchemaEdit> { route ->
+                SchemaEditScreen(
+                    title = route.title,
+                    request = SchemaEditRequest(route.path, route.schemaPath, route.method, route.exclude.toSet(), route.presets),
+                    onClose = { navigator.close(route) },
+                )
+            }
             entry<Route.GuestConfig> { route -> GuestConfigScreen(route.resourceId, onClose = { navigator.close(route) }) }
         },
     )

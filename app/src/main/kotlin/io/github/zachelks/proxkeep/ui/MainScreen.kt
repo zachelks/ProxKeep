@@ -140,9 +140,9 @@ fun MainScreen(navigator: Navigator) {
                                     )
                                 }
                                 active != null && destination == TopLevelDestination.Overview ->
-                                    OverviewRoute(profile = active.profile)
+                                    OverviewRoute(profile = active.profile, onOpenRoute = navigator::open)
                                 active != null && destination == TopLevelDestination.Infrastructure ->
-                                    InfrastructureRoute(onConsoleOpened = openTerminal)
+                                    InfrastructureRoute(onConsoleOpened = openTerminal, onOpenRoute = navigator::open)
                             }
                         }
                     }

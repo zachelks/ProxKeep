@@ -11,6 +11,9 @@ sealed interface ConsoleTarget {
     /** A login shell on the node itself. */
     data class NodeShell(override val node: String) : ConsoleTarget
 
+    /** A shell on the node that upgrades its packages, as the web interface's Upgrade button does. */
+    data class NodeUpgrade(override val node: String) : ConsoleTarget
+
     /**
      * A guest's console: a container's terminal, or a virtual machine's
      * serial port. A virtual machine needs a serial port configured for this.

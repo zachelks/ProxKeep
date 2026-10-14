@@ -15,6 +15,15 @@ import io.github.zachelks.proxkeep.core.api.model.BackupCompression
 import io.github.zachelks.proxkeep.core.api.model.BackupMode
 import io.github.zachelks.proxkeep.core.api.model.MigrationCheck
 import io.github.zachelks.proxkeep.core.api.model.NodeNetwork
+import io.github.zachelks.proxkeep.core.api.model.NodeCertificate
+import io.github.zachelks.proxkeep.core.api.model.NodeDns
+import io.github.zachelks.proxkeep.core.api.model.NodeService
+import io.github.zachelks.proxkeep.core.api.model.NodeStatus
+import io.github.zachelks.proxkeep.core.api.model.NodeTime
+import io.github.zachelks.proxkeep.core.api.model.PackageUpdate
+import io.github.zachelks.proxkeep.core.api.model.PhysicalDisk
+import io.github.zachelks.proxkeep.core.api.model.ServiceAction
+import io.github.zachelks.proxkeep.core.api.model.SmartData
 import io.github.zachelks.proxkeep.core.api.model.NodeStorage
 import io.github.zachelks.proxkeep.core.api.model.PendingChange
 import io.github.zachelks.proxkeep.core.api.model.Snapshot
@@ -289,6 +298,89 @@ class PveClient(
         return listOf("nodes", node, type, vmid.toString())
     }
 
+    // --- Nodes -----------------------------------------------------------
+
+    suspend fun nodeStatus(node: String): NodeStatus = call(get(listOf("nodes", node, "status")), NodeStatus.serializer())
+
+    /** Reboots or shuts down a node. Guests on it are shut down first, as configured. */
+    suspend fun nodePower(node: String, reboot: Boolean): String? =
+        callForTask(post(listOf("nodes", node, "status"), mapOf("command" to if (reboot) "reboot" else "shutdown")))
+
+    /** Packages with a newer version in the node's package lists, as last refreshed. */
+    suspend fun packageUpdates(node: String): List<PackageUpdate> =
+        call(get(listOf("nodes", node, "apt", "update")), ListSerializer(PackageUpdate.serializer())).sortedBy { it.name }
+
+    /** Downloads the node's package lists again, as `apt update` does. Returns the task's UPID. */
+    suspend fun refreshPackageLists(node: String): String? = callForTask(post(listOf("nodes", node, "apt", "update"), emptyMap()))
+
+    suspend fun services(node: String): List<NodeService> =
+        call(get(listOf("nodes", node, "services")), ListSerializer(NodeService.serializer())).sortedBy { it.service }
+
+    suspend fun serviceAction(node: String, service: String, action: ServiceAction): String? =
+        callForTask(post(listOf("nodes", node, "services", service, action.apiName), emptyMap()))
+
+    /** Applies the node's pending network configuration. Returns the task's UPID. */
+    suspend fun applyNetwork(node: String): String? = callForTask(put(listOf("nodes", node, "network"), emptyMap()))
+
+    /** Throws away the node's pending network configuration. */
+    suspend fun revertNetwork(node: String) {
+        callForTask(delete(listOf("nodes", node, "network")))
+    }
+
+    suspend fun nodeDns(node: String): NodeDns = call(get(listOf("nodes", node, "dns")), NodeDns.serializer())
+
+    /** Sets the node's DNS search domain and up to three servers. */
+    suspend fun setNodeDns(node: String, search: String, servers: List<String>) {
+        val form = LinkedHashMap<String, String>()
+        form["search"] = search
+        servers.take(MAX_DNS_SERVERS).forEachIndexed { index, server -> form["dns${index + 1}"] = server }
+        val missing = (servers.size until MAX_DNS_SERVERS).map { "dns${it + 1}" }
+        if (missing.isNotEmpty()) form["delete"] = missing.joinToString(",")
+        callForTask(put(listOf("nodes", node, "dns"), form))
+    }
+
+    suspend fun nodeTime(node: String): NodeTime = call(get(listOf("nodes", node, "time")), NodeTime.serializer())
+
+    suspend fun setTimezone(node: String, timezone: String) {
+        callForTask(put(listOf("nodes", node, "time"), mapOf("timezone" to timezone)))
+    }
+
+    suspend fun physicalDisks(node: String): List<PhysicalDisk> =
+        call(get(listOf("nodes", node, "disks", "list")), ListSerializer(PhysicalDisk.serializer())).sortedBy { it.devpath }
+
+    suspend fun smart(node: String, disk: String): SmartData =
+        call(get(listOf("nodes", node, "disks", "smart"), query = mapOf("disk" to disk)), SmartData.serializer())
+
+    suspend fun certificates(node: String): List<NodeCertificate> =
+        call(get(listOf("nodes", node, "certificates", "info")), ListSerializer(NodeCertificate.serializer()))
+
+    /** The newest [lastEntries] lines of the node's system journal, oldest first. */
+    suspend fun journal(node: String, lastEntries: Int = 500): List<String> =
+        call(get(listOf("nodes", node, "journal"), query = mapOf("lastentries" to lastEntries.toString())), ListSerializer(String.serializer()))
+
+    // --- Any path --------------------------------------------------------
+
+    /**
+     * Reads any API path, such as `/cluster/options`, for screens built from
+     * the API schema.
+     */
+    suspend fun read(path: String, query: Map<String, String> = emptyMap()): JsonElement =
+        call(get(segments(path), query = query), JsonElement.serializer())
+
+    /**
+     * Writes to any API path with [method] `POST`, `PUT` or `DELETE`.
+     *
+     * @return the task's UPID when the change runs as a task, or null
+     */
+    suspend fun write(method: String, path: String, form: Map<String, String>): String? = when (method) {
+        "DELETE" -> callForTask(delete(segments(path), form))
+        "POST" -> callForTask(post(segments(path), form))
+        "PUT" -> callForTask(put(segments(path), form))
+        else -> throw IllegalArgumentException("Unsupported method $method")
+    }
+
+    private fun segments(path: String): List<String> = path.trim('/').split('/').filter { it.isNotEmpty() }
+
     // --- Consoles --------------------------------------------------------
 
     /**
@@ -305,10 +397,11 @@ class PveClient(
         listener: ConsoleChannel.Listener,
     ): ConsoleChannel {
         val base = when (target) {
-            is ConsoleTarget.NodeShell -> listOf("nodes", target.node)
+            is ConsoleTarget.NodeShell, is ConsoleTarget.NodeUpgrade -> listOf("nodes", target.node)
             is ConsoleTarget.Guest -> guestPath(target.node, target.kind, target.vmid)
         }
-        val ticket = call(post(base + "termproxy", emptyMap()), TermProxyTicket.serializer())
+        val form = if (target is ConsoleTarget.NodeUpgrade) mapOf("cmd" to "upgrade") else emptyMap()
+        val ticket = call(post(base + "termproxy", form), TermProxyTicket.serializer())
         // The websocket is authenticated twice: by the session's credentials on
         // the request, and by the one-time ticket once it is open.
         val query = mapOf("port" to ticket.port.toString(), "vncticket" to ticket.ticket)
@@ -642,6 +735,8 @@ class PveClient(
     private companion object {
         const val STATUS_OK = 200
         const val TICKET_COOKIE = "PVEAuthCookie"
+
+        const val MAX_DNS_SERVERS = 3
 
         /** Relative to the API root, `/api2/json/`. */
         const val SCHEMA_PATH = "../../pve-docs/api-viewer/apidata.js"
