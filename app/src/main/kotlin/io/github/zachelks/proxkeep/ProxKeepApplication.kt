@@ -9,6 +9,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.console.ConsoleService
 import io.github.zachelks.proxkeep.data.AppSettings
+import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.GuestActions
 import io.github.zachelks.proxkeep.data.KeyChainKeys
@@ -79,6 +80,8 @@ class AppContainer(context: Context) {
     val guestActions = GuestActions(repository, refresh, scope)
 
     val consoles = ConsoleManager(context.applicationContext, repository, scope)
+
+    val desktops = DesktopManager(repository, scope)
 
     val pendingNavigation = PendingNavigation()
 

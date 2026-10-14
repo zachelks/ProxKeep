@@ -32,4 +32,8 @@ sealed interface Route {
     /** The open console. */
     @Serializable
     data object Terminal : Route
+
+    /** The open remote desktop. */
+    @Serializable
+    data object Desktop : Route
 }

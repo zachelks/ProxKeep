@@ -417,4 +417,24 @@
     <string name="palette_tango_light">Tango Light</string>
     <string name="about_font">JetBrains Mono font</string>
     <string name="about_font_license">Bundled under the SIL Open Font License 1.1</string>
+
+    <!-- Remote desktop -->
+    <string name="action_open_display">Open display</string>
+    <string name="action_return_to_display">Return to the open display</string>
+    <string name="desktop_description">Display of %1$s</string>
+    <string name="desktop_size">%1$d × %2$d</string>
+    <string name="desktop_mode_touch">Touch mode: the pointer goes where you touch. Switch to trackpad mode.</string>
+    <string name="desktop_mode_trackpad">Trackpad mode: drag to move the pointer. Switch to touch mode.</string>
+    <string name="desktop_fit">Fit to screen</string>
+    <string name="desktop_actual_size">Actual size</string>
+    <string name="desktop_keyboard">Keyboard</string>
+    <string name="desktop_show_keys">Show extra keys</string>
+    <string name="desktop_hide_keys">Hide extra keys</string>
+    <string name="desktop_ctrl_alt_del">Send Ctrl+Alt+Del</string>
+    <string name="desktop_paste">Paste to the guest\'s clipboard</string>
+    <string name="desktop_picture_in_picture">Picture-in-picture</string>
+    <string name="desktop_disconnect">Disconnect</string>
+    <string name="desktop_clipboard_copied">Copied the guest\'s clipboard</string>
+    <string name="desktop_about">About the remote desktop</string>
+    <string name="desktop_about_body">Tap to click, long-press or tap with two fingers to right-click, drag with two fingers to scroll, double-tap and drag to drag, and pinch to zoom.\n\nThe display has no sound. Its resolution is set inside the guest and doesn\'t follow this screen. The clipboard is shared only when the virtual machine\'s display has the VNC clipboard switched on and the guest runs the SPICE guest tools.</string>
 </resources>

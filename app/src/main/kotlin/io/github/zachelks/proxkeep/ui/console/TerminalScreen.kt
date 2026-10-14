@@ -9,23 +9,18 @@ import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,19 +45,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -73,14 +61,14 @@ import com.termux.view.TerminalView
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.data.DEFAULT_TEXT_SIZE_SP
 import io.github.zachelks.proxkeep.data.TERMINAL_TEXT_SIZES_SP
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import io.github.zachelks.proxkeep.console.ConsoleSession
 import io.github.zachelks.proxkeep.console.ConsoleState
 import io.github.zachelks.proxkeep.console.KeyAction
 import io.github.zachelks.proxkeep.console.TerminalFont
 import io.github.zachelks.proxkeep.console.TerminalKey
+import io.github.zachelks.proxkeep.ui.components.KeyCap
+import io.github.zachelks.proxkeep.ui.components.ModifierCap
 
 /**
  * A full-screen terminal: the console on screen, a row of the keys an
@@ -378,75 +366,3 @@ private fun press(target: TerminalView, action: KeyAction, modifiers: ModifierKe
     }
 }
 
-@Composable
-private fun ModifierCap(label: String, held: Boolean, onToggle: () -> Unit) {
-    CapSurface(label, held, Modifier.toggleable(value = held, role = Role.Switch, onValueChange = { onToggle() }))
-}
-
-/** A key that acts on press, and again and again while held if it [repeats]. */
-@Composable
-private fun KeyCap(label: String, repeats: Boolean, onPress: () -> Unit) {
-    val press by rememberUpdatedState(onPress)
-    var pressed by remember { mutableStateOf(false) }
-    CapSurface(
-        label = label,
-        held = pressed,
-        modifier = Modifier
-            .semantics {
-                role = Role.Button
-                onClick {
-                    press()
-                    true
-                }
-            }
-            .pointerInput(repeats) {
-                detectTapGestures(
-                    onPress = {
-                        pressed = true
-                        press()
-                        coroutineScope {
-                            val repeating = if (repeats) {
-                                launch {
-                                    delay(REPEAT_DELAY_MS)
-                                    while (true) {
-                                        press()
-                                        delay(REPEAT_INTERVAL_MS)
-                                    }
-                                }
-                            } else {
-                                null
-                            }
-                            tryAwaitRelease()
-                            repeating?.cancel()
-                        }
-                        pressed = false
-                    },
-                )
-            },
-    )
-}
-
-@Composable
-private fun CapSurface(label: String, held: Boolean, modifier: Modifier) {
-    val background = if (held) MaterialTheme.colorScheme.primary else Color.Transparent
-    val foreground = if (held) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier = Modifier
-            .defaultMinSize(minWidth = 44.dp, minHeight = 40.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(background)
-            .then(modifier)
-            .padding(horizontal = 10.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = foreground,
-            fontFamily = FontFamily.Monospace,
-            style = MaterialTheme.typography.labelLarge,
-        )
-    }
-}
-
-private const val REPEAT_DELAY_MS = 400L
-private const val REPEAT_INTERVAL_MS = 50L

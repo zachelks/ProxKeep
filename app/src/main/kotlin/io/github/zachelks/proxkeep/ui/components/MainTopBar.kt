@@ -43,6 +43,8 @@ fun MainTopBar(
     viewModel: ShellViewModel,
     openConsoles: Int,
     onOpenConsoles: () -> Unit,
+    desktopOpen: Boolean,
+    onOpenDesktop: () -> Unit,
     onSearch: () -> Unit,
     onAddServer: () -> Unit,
     onSettings: () -> Unit,
@@ -53,6 +55,14 @@ fun MainTopBar(
     TopAppBar(
         title = { Text(title) },
         actions = {
+            if (desktopOpen) {
+                IconButton(onClick = onOpenDesktop) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_desktop),
+                        contentDescription = stringResource(R.string.action_return_to_display),
+                    )
+                }
+            }
             if (openConsoles > 0) {
                 IconButton(onClick = onOpenConsoles) {
                     BadgedBox(badge = { Badge { Text(openConsoles.toString()) } }) {

@@ -16,6 +16,7 @@ import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.GuestActions
 import io.github.zachelks.proxkeep.data.RefreshSignal
+import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.data.ServerAccess
 import io.github.zachelks.proxkeep.data.ServerAccessRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
@@ -79,6 +80,7 @@ class GuestsViewModel(
     private val actions: GuestActions,
     private val consoles: ConsoleManager,
     private val refreshSignal: RefreshSignal,
+    private val desktops: DesktopManager? = null,
 ) : ViewModel() {
 
     val cluster: StateFlow<ClusterState> = clusterRepository.state
@@ -148,6 +150,14 @@ class GuestsViewModel(
         val node = resource.node ?: return
         val vmid = resource.vmid ?: return
         consoles.open(ConsoleTarget.Guest(node, resource.kind, vmid), title = resource.name ?: vmid.toString())
+    }
+
+    /** Opens a virtual machine's display. */
+    fun openDesktop(resource: ClusterResource) {
+        val node = resource.node ?: return
+        val vmid = resource.vmid ?: return
+        if (resource.kind != ResourceKind.Qemu) return
+        desktops?.open(node, vmid, title = resource.name ?: vmid.toString())
     }
 
     private fun ClusterState.Loaded.locate(resourceId: String): GuestLocation? {

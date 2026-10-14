@@ -88,6 +88,7 @@ fun GuestDetailPane(
     onBack: () -> Unit,
     onAction: (GuestAction) -> Unit,
     onOpenConsole: () -> Unit,
+    onOpenDisplay: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -111,6 +112,14 @@ fun GuestDetailPane(
                     }
                 },
                 actions = {
+                    if (resource != null && canOpenConsole && hasDisplay(resource)) {
+                        IconButton(onClick = onOpenDisplay) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_desktop),
+                                contentDescription = stringResource(R.string.action_open_display),
+                            )
+                        }
+                    }
                     if (resource != null && canOpenConsole && hasTextConsole(resource, detail?.config)) {
                         IconButton(onClick = onOpenConsole) {
                             Icon(
@@ -198,6 +207,10 @@ private fun hasTextConsole(resource: ClusterResource, config: GuestConfig?): Boo
         else -> false
     }
 }
+
+/** Whether the guest has a graphical display to open: a running virtual machine. */
+private fun hasDisplay(resource: ClusterResource): Boolean =
+    resource.kind == ResourceKind.Qemu && resource.status == "running" && !resource.isTemplate
 
 @Composable
 private fun guestSubtitle(resource: ClusterResource): String {

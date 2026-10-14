@@ -128,6 +128,25 @@ class GuestDetailPaneTest {
     }
 
     @Test
+    fun aRunningVirtualMachineOffersItsDisplay() {
+        show(running)
+
+        compose.onNodeWithContentDescription(text(R.string.action_open_display)).assertIsDisplayed()
+    }
+
+    @Test
+    fun aStoppedMachineHasNoDisplay() {
+        show(running.copy(status = "stopped"))
+        compose.onNodeWithContentDescription(text(R.string.action_open_display)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aContainerHasNoDisplay() {
+        show(running.copy(id = "lxc/200", type = "lxc", vmid = 200))
+        compose.onNodeWithContentDescription(text(R.string.action_open_display)).assertDoesNotExist()
+    }
+
+    @Test
     fun aGuestThatIsGoneSaysSo() {
         show(null)
 

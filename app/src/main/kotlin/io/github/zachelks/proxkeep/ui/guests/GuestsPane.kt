@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
  * one. Phones show one at a time; wider windows show them side by side.
  *
  * @param onConsoleOpened called after a guest's console has been opened, to show it
+ * @param onDesktopOpened called after a virtual machine's display has been opened, to show it
  * @param guestToOpen a guest to show, for example one picked in search
  * @param onGuestOpened called once [guestToOpen] is on screen
  */
@@ -61,6 +62,7 @@ import kotlinx.coroutines.launch
 fun GuestsPane(
     topBar: TopBar,
     onConsoleOpened: () -> Unit,
+    onDesktopOpened: () -> Unit = {},
     guestToOpen: String? = null,
     onGuestOpened: () -> Unit = {},
 ) {
@@ -73,6 +75,7 @@ fun GuestsPane(
             container.guestActions,
             container.consoles,
             container.refresh,
+            container.desktops,
         )
     }
     val cluster by viewModel.cluster.collectAsStateWithLifecycle()
@@ -142,6 +145,12 @@ fun GuestsPane(
                                 resource?.let {
                                     viewModel.openConsole(it)
                                     onConsoleOpened()
+                                }
+                            },
+                            onOpenDisplay = {
+                                resource?.let {
+                                    viewModel.openDesktop(it)
+                                    onDesktopOpened()
                                 }
                             },
                         )

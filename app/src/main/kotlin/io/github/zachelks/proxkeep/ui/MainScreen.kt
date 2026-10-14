@@ -66,6 +66,7 @@ fun MainScreen(navigator: Navigator) {
     val session by viewModel.session.collectAsStateWithLifecycle()
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val consoles by container.consoles.sessions.collectAsStateWithLifecycle()
+    val desktop by container.desktops.current.collectAsStateWithLifecycle()
 
     val snackbars = remember { SnackbarHostState() }
     val resources = LocalResources.current
@@ -79,6 +80,8 @@ fun MainScreen(navigator: Navigator) {
             viewModel = viewModel,
             openConsoles = consoles.size,
             onOpenConsoles = { navigator.open(Route.Terminal) },
+            desktopOpen = desktop != null,
+            onOpenDesktop = { navigator.open(Route.Desktop) },
             onSearch = { searching = true },
             onAddServer = { navigator.open(Route.SignIn()) },
             onSettings = { navigator.open(Route.Settings) },
@@ -108,6 +111,7 @@ fun MainScreen(navigator: Navigator) {
                         GuestsPane(
                             topBar = topBar,
                             onConsoleOpened = openTerminal,
+                            onDesktopOpened = { navigator.open(Route.Desktop) },
                             guestToOpen = guestToOpen,
                             onGuestOpened = { guestToOpen = null },
                         )

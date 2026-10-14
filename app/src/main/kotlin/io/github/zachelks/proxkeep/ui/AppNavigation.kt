@@ -3,6 +3,7 @@ package io.github.zachelks.proxkeep.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -13,6 +14,7 @@ import androidx.navigation3.ui.NavDisplay
 import io.github.zachelks.proxkeep.ui.addserver.AddServerFlow
 import io.github.zachelks.proxkeep.ui.addserver.AddServerViewModel
 import io.github.zachelks.proxkeep.ui.console.TerminalScreen
+import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.navigation.rememberBackStack
@@ -51,6 +53,7 @@ fun AppNavigation() {
             entry<Route.ExtraKeys> { ExtraKeysScreen(onClose = { navigator.close(Route.ExtraKeys) }) }
             entry<Route.SignIn> { route -> SignInEntry(route, navigator) }
             entry<Route.Terminal> { TerminalEntry(navigator) }
+            entry<Route.Desktop> { DesktopEntry(navigator) }
         },
     )
 }
@@ -89,4 +92,28 @@ private fun TerminalEntry(navigator: Navigator) {
         font = font,
         onTextSizeChange = container.settings::setTerminalTextSize,
     )
+}
+
+@Composable
+private fun DesktopEntry(navigator: Navigator) {
+    val desktops = appContainer().desktops
+    val desktop by desktops.current.collectAsStateWithLifecycle()
+    val open = desktop
+    if (open == null) {
+        // The desktop was closed elsewhere, for example by switching server.
+        LaunchedEffect(Unit) { navigator.close(Route.Desktop) }
+        return
+    }
+    // Keyed so a reconnect, which is a new session, starts with a fresh view.
+    key(open.id) {
+        DesktopScreen(
+            session = open,
+            onLeave = { navigator.close(Route.Desktop) },
+            onDisconnect = {
+                desktops.close()
+                navigator.close(Route.Desktop)
+            },
+            onReconnect = desktops::reconnect,
+        )
+    }
 }
