@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.console.ConsoleSession
+import io.github.zachelks.proxkeep.console.TerminalKey
 import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
 import org.junit.Rule
 import org.junit.runner.RunWith
@@ -39,7 +40,16 @@ class TerminalScreenTest {
         other.end()
     }
 
-    private fun show() {
+    @Test
+    fun theExtraKeysRowShowsTheChosenKeys() {
+        show(extraKeys = listOf(TerminalKey.F5, TerminalKey.CTRL))
+
+        compose.onNodeWithText("F5").assertExists()
+        compose.onNodeWithText("CTRL").assertExists()
+        compose.onNodeWithText("ESC").assertDoesNotExist()
+    }
+
+    private fun show(extraKeys: List<TerminalKey> = TerminalKey.DEFAULT_ROW) {
         compose.setContent {
             TerminalScreen(
                 sessions = listOf(shell, other),
@@ -48,6 +58,7 @@ class TerminalScreenTest {
                 onEnd = { events += "end ${it.title}" },
                 onReconnect = { events += "reconnect ${it.title}" },
                 onLeave = { events += "leave" },
+                extraKeys = extraKeys,
             )
         }
     }

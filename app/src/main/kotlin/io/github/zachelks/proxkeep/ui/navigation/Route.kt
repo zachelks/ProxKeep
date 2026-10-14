@@ -17,6 +17,10 @@ sealed interface Route {
     @Serializable
     data object Settings : Route
 
+    /** The editor for the terminal's extra-keys row, opened from Settings. */
+    @Serializable
+    data object ExtraKeys : Route
+
     /**
      * Adds a server, or signs in to a saved one.
      *

@@ -2,6 +2,7 @@ package io.github.zachelks.proxkeep.data
 
 import android.content.Context
 import androidx.core.content.edit
+import io.github.zachelks.proxkeep.console.TerminalKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +37,19 @@ class AppSettings(context: Context) {
     )
     val lockTimeout: StateFlow<LockTimeout> = _lockTimeout.asStateFlow()
 
+    private val _extraKeys = MutableStateFlow(
+        preferences.getString(KEY_EXTRA_KEYS, null)?.let(TerminalKey::parse) ?: TerminalKey.DEFAULT_ROW,
+    )
+
+    /** The terminal's extra-keys row, in order. Empty hides the row. */
+    val extraKeys: StateFlow<List<TerminalKey>> = _extraKeys.asStateFlow()
+
+    fun setExtraKeys(row: List<TerminalKey>) {
+        val distinct = row.distinct()
+        preferences.edit { putString(KEY_EXTRA_KEYS, TerminalKey.encode(distinct)) }
+        _extraKeys.value = distinct
+    }
+
     fun setLockEnabled(enabled: Boolean) {
         preferences.edit { putBoolean(KEY_LOCK_ENABLED, enabled) }
         _lockEnabled.value = enabled
@@ -49,5 +63,6 @@ class AppSettings(context: Context) {
     private companion object {
         const val KEY_LOCK_ENABLED = "app_lock_enabled"
         const val KEY_LOCK_TIMEOUT = "app_lock_timeout_seconds"
+        const val KEY_EXTRA_KEYS = "terminal_extra_keys"
     }
 }

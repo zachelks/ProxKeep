@@ -392,4 +392,15 @@
         <item quantity="one">%d console open</item>
         <item quantity="other">%d consoles open</item>
     </plurals>
+
+    <!-- Terminal settings -->
+    <string name="settings_terminal">Terminal</string>
+    <string name="settings_extra_keys">Extra keys</string>
+    <string name="extra_keys_intro">The row of keys above the keyboard in the terminal. Arrows, Page Up, Page Down and Delete repeat while held.</string>
+    <string name="extra_keys_hidden">No extra keys. The row is hidden.</string>
+    <string name="extra_keys_add">Add keys</string>
+    <string name="action_reset_default">Reset</string>
+    <string name="action_move_key_up">Move %1$s left</string>
+    <string name="action_move_key_down">Move %1$s right</string>
+    <string name="action_remove_key">Remove %1$s</string>
 </resources>

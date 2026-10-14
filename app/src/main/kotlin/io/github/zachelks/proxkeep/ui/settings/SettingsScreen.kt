@@ -47,7 +47,7 @@ import io.github.zachelks.proxkeep.ui.appContainer
 private const val SOURCE_URL = "https://github.com/zachelks/ProxKeep"
 
 @Composable
-fun SettingsScreen(onClose: () -> Unit) {
+fun SettingsScreen(onClose: () -> Unit, onOpenExtraKeys: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -71,6 +71,9 @@ fun SettingsScreen(onClose: () -> Unit) {
         ) {
             SectionTitle(stringResource(R.string.settings_security))
             AppLockSettings()
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SectionTitle(stringResource(R.string.settings_terminal))
+            TerminalSettings(onOpenExtraKeys)
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             SectionTitle(stringResource(R.string.settings_about))
             About()
@@ -151,6 +154,25 @@ private fun AppLockSettings() {
             }
         }
     }
+}
+
+@Composable
+private fun TerminalSettings(onOpenExtraKeys: () -> Unit) {
+    val row by appContainer().settings.extraKeys.collectAsStateWithLifecycle()
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_extra_keys)) },
+        supportingContent = {
+            Text(
+                if (row.isEmpty()) {
+                    stringResource(R.string.extra_keys_hidden)
+                } else {
+                    row.joinToString(" ") { it.label }
+                },
+                maxLines = 1,
+            )
+        },
+        modifier = Modifier.clickable(onClick = onOpenExtraKeys),
+    )
 }
 
 private fun LockTimeout.label(): Int = when (this) {

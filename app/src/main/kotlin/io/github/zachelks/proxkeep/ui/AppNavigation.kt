@@ -16,6 +16,7 @@ import io.github.zachelks.proxkeep.ui.console.TerminalScreen
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.navigation.rememberBackStack
+import io.github.zachelks.proxkeep.ui.settings.ExtraKeysScreen
 import io.github.zachelks.proxkeep.ui.settings.SettingsScreen
 
 /**
@@ -41,7 +42,13 @@ fun AppNavigation() {
         ),
         entryProvider = entryProvider<Route> {
             entry<Route.Main> { MainScreen(navigator) }
-            entry<Route.Settings> { SettingsScreen(onClose = { navigator.close(Route.Settings) }) }
+            entry<Route.Settings> {
+                SettingsScreen(
+                    onClose = { navigator.close(Route.Settings) },
+                    onOpenExtraKeys = { navigator.open(Route.ExtraKeys) },
+                )
+            }
+            entry<Route.ExtraKeys> { ExtraKeysScreen(onClose = { navigator.close(Route.ExtraKeys) }) }
             entry<Route.SignIn> { route -> SignInEntry(route, navigator) }
             entry<Route.Terminal> { TerminalEntry(navigator) }
         },
@@ -57,8 +64,10 @@ private fun SignInEntry(route: Route.SignIn, navigator: Navigator) {
 
 @Composable
 private fun TerminalEntry(navigator: Navigator) {
-    val consoles = appContainer().consoles
+    val container = appContainer()
+    val consoles = container.consoles
     val sessions by consoles.sessions.collectAsStateWithLifecycle()
+    val extraKeys by container.settings.extraKeys.collectAsStateWithLifecycle()
     val console by consoles.current.collectAsStateWithLifecycle()
     val open = console
     if (open == null) {
@@ -73,5 +82,6 @@ private fun TerminalEntry(navigator: Navigator) {
         onEnd = consoles::close,
         onReconnect = consoles::reconnect,
         onLeave = { navigator.close(Route.Terminal) },
+        extraKeys = extraKeys,
     )
 }

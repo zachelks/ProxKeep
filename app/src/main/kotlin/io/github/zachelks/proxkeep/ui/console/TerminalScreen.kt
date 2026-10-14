@@ -7,12 +7,13 @@ import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.os.Build
 import android.view.HapticFeedbackConstants
-import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,17 +47,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,8 +72,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.terminal.KeyHandler
 import com.termux.view.TerminalView
 import io.github.zachelks.proxkeep.R
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import io.github.zachelks.proxkeep.console.ConsoleSession
 import io.github.zachelks.proxkeep.console.ConsoleState
+import io.github.zachelks.proxkeep.console.KeyAction
+import io.github.zachelks.proxkeep.console.TerminalKey
 
 private val DefaultTextSize = 14.sp
 private val SmallestTextSize = 7.sp
@@ -87,6 +98,7 @@ fun TerminalScreen(
     onEnd: (ConsoleSession) -> Unit,
     onReconnect: (ConsoleSession) -> Unit,
     onLeave: () -> Unit,
+    extraKeys: List<TerminalKey> = TerminalKey.DEFAULT_ROW,
 ) {
     val state by console.state.collectAsStateWithLifecycle()
     var confirmingEnd by remember { mutableStateOf(false) }
@@ -231,7 +243,7 @@ fun TerminalScreen(
             if (state is ConsoleState.Closed) {
                 ClosedBar(onReconnect = { onReconnect(console) }, onClose = { onEnd(console) })
             } else {
-                ExtraKeysRow(modifiers = modifiers, view = { viewClient.view })
+                ExtraKeysRow(row = extraKeys, modifiers = modifiers, view = { viewClient.view })
             }
         }
     }
@@ -303,40 +315,14 @@ private fun ClosedBar(onReconnect: () -> Unit, onClose: () -> Unit) {
     }
 }
 
-/** One key of the extra-keys row. */
-private sealed interface ExtraKey {
-    val label: String
-
-    /** A key the terminal knows by key code, such as an arrow. */
-    data class Code(override val label: String, val keyCode: Int) : ExtraKey
-
-    /** A key that types a character. */
-    data class Character(override val label: String, val codePoint: Int = label.codePointAt(0)) : ExtraKey
-}
-
-private val extraKeys: List<ExtraKey> = listOf(
-    ExtraKey.Code("ESC", KeyEvent.KEYCODE_ESCAPE),
-    ExtraKey.Code("TAB", KeyEvent.KEYCODE_TAB),
-    ExtraKey.Code("←", KeyEvent.KEYCODE_DPAD_LEFT),
-    ExtraKey.Code("↓", KeyEvent.KEYCODE_DPAD_DOWN),
-    ExtraKey.Code("↑", KeyEvent.KEYCODE_DPAD_UP),
-    ExtraKey.Code("→", KeyEvent.KEYCODE_DPAD_RIGHT),
-    ExtraKey.Code("HOME", KeyEvent.KEYCODE_MOVE_HOME),
-    ExtraKey.Code("END", KeyEvent.KEYCODE_MOVE_END),
-    ExtraKey.Code("PGUP", KeyEvent.KEYCODE_PAGE_UP),
-    ExtraKey.Code("PGDN", KeyEvent.KEYCODE_PAGE_DOWN),
-    ExtraKey.Character("-"),
-    ExtraKey.Character("/"),
-    ExtraKey.Character("|"),
-    ExtraKey.Character("~"),
-)
-
 /**
- * The keys an on-screen keyboard does not have. Ctrl and Alt apply to the
- * next key pressed, here or on the keyboard, and then release.
+ * The keys an on-screen keyboard does not have, in the person's order. Ctrl
+ * and Alt apply to the next key pressed, here or on the keyboard, and then
+ * release. Arrows and other repeating keys repeat while held.
  */
 @Composable
-private fun ExtraKeysRow(modifiers: ModifierKeys, view: () -> TerminalView?) {
+private fun ExtraKeysRow(row: List<TerminalKey>, modifiers: ModifierKeys, view: () -> TerminalView?) {
+    if (row.isEmpty()) return
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -344,28 +330,16 @@ private fun ExtraKeysRow(modifiers: ModifierKeys, view: () -> TerminalView?) {
                 .padding(horizontal = 4.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            KeyCap(label = "CTRL", held = modifiers.ctrl, role = Role.Switch) { modifiers.ctrl = !modifiers.ctrl }
-            KeyCap(label = "ALT", held = modifiers.alt, role = Role.Switch) { modifiers.alt = !modifiers.alt }
-            extraKeys.forEach { key ->
-                KeyCap(label = key.label, held = false, role = Role.Button) {
-                    val target = view() ?: return@KeyCap
-                    // Nothing can be typed until the terminal has been laid out.
-                    if (target.mEmulator == null) return@KeyCap
-                    target.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    when (key) {
-                        is ExtraKey.Code -> {
-                            var keyModifiers = 0
-                            if (modifiers.takeCtrl()) keyModifiers = keyModifiers or KeyHandler.KEYMOD_CTRL
-                            if (modifiers.takeAlt()) keyModifiers = keyModifiers or KeyHandler.KEYMOD_ALT
-                            target.handleKeyCode(key.keyCode, keyModifiers)
-                        }
-                        // The view itself applies and releases Ctrl and Alt for typed characters.
-                        is ExtraKey.Character -> target.inputCodePoint(
-                            TerminalView.KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD,
-                            key.codePoint,
-                            false,
-                            false,
-                        )
+            row.forEach { key ->
+                when (val action = key.action) {
+                    KeyAction.Modifier.Ctrl -> ModifierCap(key.label, held = modifiers.ctrl) { modifiers.ctrl = !modifiers.ctrl }
+                    KeyAction.Modifier.Alt -> ModifierCap(key.label, held = modifiers.alt) { modifiers.alt = !modifiers.alt }
+                    is KeyAction.Code, is KeyAction.Character -> KeyCap(key.label, repeats = key.repeats) {
+                        val target = view() ?: return@KeyCap
+                        // Nothing can be typed until the terminal has been laid out.
+                        if (target.mEmulator == null) return@KeyCap
+                        target.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        press(target, action, modifiers)
                     }
                 }
             }
@@ -373,8 +347,75 @@ private fun ExtraKeysRow(modifiers: ModifierKeys, view: () -> TerminalView?) {
     }
 }
 
+private fun press(target: TerminalView, action: KeyAction, modifiers: ModifierKeys) {
+    when (action) {
+        is KeyAction.Code -> {
+            var keyModifiers = 0
+            if (modifiers.takeCtrl()) keyModifiers = keyModifiers or KeyHandler.KEYMOD_CTRL
+            if (modifiers.takeAlt()) keyModifiers = keyModifiers or KeyHandler.KEYMOD_ALT
+            target.handleKeyCode(action.keyCode, keyModifiers)
+        }
+        // The view itself applies and releases Ctrl and Alt for typed characters.
+        is KeyAction.Character -> target.inputCodePoint(
+            TerminalView.KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD,
+            action.codePoint,
+            false,
+            false,
+        )
+        is KeyAction.Modifier -> Unit
+    }
+}
+
 @Composable
-private fun KeyCap(label: String, held: Boolean, role: Role, onClick: () -> Unit) {
+private fun ModifierCap(label: String, held: Boolean, onToggle: () -> Unit) {
+    CapSurface(label, held, Modifier.toggleable(value = held, role = Role.Switch, onValueChange = { onToggle() }))
+}
+
+/** A key that acts on press, and again and again while held if it [repeats]. */
+@Composable
+private fun KeyCap(label: String, repeats: Boolean, onPress: () -> Unit) {
+    val press by rememberUpdatedState(onPress)
+    var pressed by remember { mutableStateOf(false) }
+    CapSurface(
+        label = label,
+        held = pressed,
+        modifier = Modifier
+            .semantics {
+                role = Role.Button
+                onClick {
+                    press()
+                    true
+                }
+            }
+            .pointerInput(repeats) {
+                detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        press()
+                        coroutineScope {
+                            val repeating = if (repeats) {
+                                launch {
+                                    delay(REPEAT_DELAY_MS)
+                                    while (true) {
+                                        press()
+                                        delay(REPEAT_INTERVAL_MS)
+                                    }
+                                }
+                            } else {
+                                null
+                            }
+                            tryAwaitRelease()
+                            repeating?.cancel()
+                        }
+                        pressed = false
+                    },
+                )
+            },
+    )
+}
+
+@Composable
+private fun CapSurface(label: String, held: Boolean, modifier: Modifier) {
     val background = if (held) MaterialTheme.colorScheme.primary else Color.Transparent
     val foreground = if (held) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Box(
@@ -382,7 +423,7 @@ private fun KeyCap(label: String, held: Boolean, role: Role, onClick: () -> Unit
             .defaultMinSize(minWidth = 44.dp, minHeight = 40.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(background)
-            .clickable(role = role, onClick = onClick)
+            .then(modifier)
             .padding(horizontal = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -394,3 +435,6 @@ private fun KeyCap(label: String, held: Boolean, role: Role, onClick: () -> Unit
         )
     }
 }
+
+private const val REPEAT_DELAY_MS = 400L
+private const val REPEAT_INTERVAL_MS = 50L

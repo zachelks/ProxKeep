@@ -3,6 +3,7 @@ package io.github.zachelks.proxkeep.data
 import android.content.Context
 import androidx.core.content.edit
 import androidx.test.core.app.ApplicationProvider
+import io.github.zachelks.proxkeep.console.TerminalKey
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.BeforeTest
@@ -50,6 +51,22 @@ class AppSettingsTest {
         }
 
         assertEquals(LockTimeout.Default, AppSettings(context).lockTimeout.value)
+    }
+
+    @Test
+    fun theExtraKeysRowIsSavedInOrder() {
+        assertEquals(TerminalKey.DEFAULT_ROW, AppSettings(context).extraKeys.value)
+
+        AppSettings(context).setExtraKeys(listOf(TerminalKey.F2, TerminalKey.ESC, TerminalKey.F2))
+
+        assertEquals(listOf(TerminalKey.F2, TerminalKey.ESC), AppSettings(context).extraKeys.value)
+    }
+
+    @Test
+    fun anEmptyRowStaysEmpty() {
+        AppSettings(context).setExtraKeys(emptyList())
+
+        assertEquals(emptyList(), AppSettings(context).extraKeys.value)
     }
 
     @Test
