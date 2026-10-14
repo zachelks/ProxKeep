@@ -10,6 +10,7 @@ import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.GuestActions
@@ -175,6 +176,41 @@ class GuestsViewModelTest {
         val busy = withTimeout(TIMEOUT_MS) { viewModel.busyGuests.first { it.isNotEmpty() } }
 
         assertEquals(mapOf("qemu/100" to GuestAction.Start), busy)
+    }
+
+    @Test
+    fun theSelectedGuestsUsageHistoryIsRead(): Unit = runBlocking {
+        serve()
+        val timeframes = java.util.concurrent.CopyOnWriteArrayList<String>()
+        fixture.route("$VM/rrddata") { request ->
+            timeframes += request.requestUrl?.queryParameter("timeframe").orEmpty()
+            io.github.zachelks.proxkeep.data.response("""{"data":[{"time":1760400000,"cpu":0.5,"maxcpu":2},{"time":1760400060,"cpu":0.25}]}""")
+        }
+        start()
+        scope.launch { viewModel.history.collect {} }
+
+        viewModel.select("qemu/100")
+        val hour = withTimeout(TIMEOUT_MS) { viewModel.history.first { it?.points != null } }!!
+        viewModel.selectTimeframe(RrdTimeframe.Week)
+        val week = withTimeout(TIMEOUT_MS) { viewModel.history.first { it?.timeframe == RrdTimeframe.Week && it.points != null } }!!
+
+        assertEquals(listOf(0.5, 0.25), hour.points?.map { it["cpu"] })
+        assertEquals(RrdTimeframe.Week, viewModel.timeframe.value)
+        assertEquals("qemu/100", week.resourceId)
+        assertEquals(listOf("hour", "week"), timeframes)
+    }
+
+    @Test
+    fun noHistoryIsReadForAGuestThatIsNotListed(): Unit = runBlocking {
+        serve()
+        start()
+        scope.launch { viewModel.history.collect {} }
+
+        viewModel.select("qemu/999")
+        delay(200)
+
+        assertNull(viewModel.history.value)
+        assertEquals(0, fixture.requestedPaths.count { it.endsWith("rrddata") })
     }
 
     @Test

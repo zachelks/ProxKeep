@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -16,6 +17,8 @@ import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
+import io.github.zachelks.proxkeep.core.api.model.RrdPoint
+import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
 import io.github.zachelks.proxkeep.ui.theme.AppTheme
 import org.junit.Rule
 import org.junit.runner.RunWith
@@ -131,9 +134,40 @@ class GuestDetailPaneTest {
         compose.onNodeWithText(text(R.string.guest_gone)).assertIsDisplayed()
     }
 
+    @Test
+    fun usageHistoryIsChartedAndItsPeriodCanBeChanged() {
+        val chosen = mutableListOf<RrdTimeframe>()
+        val points = listOf(
+            RrdPoint(1_760_400_000, mapOf("cpu" to 0.5, "mem" to 1024.0 * 1024 * 1024, "maxmem" to 2048.0 * 1024 * 1024)),
+            RrdPoint(1_760_400_060, mapOf("cpu" to 0.25, "mem" to 512.0 * 1024 * 1024, "netin" to 2048.0, "netout" to 1024.0)),
+        )
+        show(running, history = UsageHistory("qemu/100", RrdTimeframe.Hour, points), onTimeframe = { chosen += it })
+
+        compose.onNode(hasContentDescription(text(R.string.chart_description, text(R.string.usage_cpu)), substring = true))
+            .assertExists()
+        compose.onNode(hasContentDescription(text(R.string.chart_series_description, text(R.string.usage_cpu), "25%", "50%"), substring = true))
+            .assertExists()
+        compose.onNode(hasContentDescription(text(R.string.chart_description, text(R.string.chart_network)), substring = true))
+            .assertExists()
+        compose.onNode(hasContentDescription(text(R.string.chart_description, text(R.string.chart_disk_io)), substring = true))
+            .assertDoesNotExist()
+
+        compose.onNodeWithText(text(R.string.timeframe_week)).performClick()
+        assertEquals(listOf(RrdTimeframe.Week), chosen)
+    }
+
+    @Test
+    fun aPeriodWithoutDataSaysSo() {
+        show(running, history = UsageHistory("qemu/100", RrdTimeframe.Hour, listOf(RrdPoint(1_760_400_000, mapOf("maxcpu" to 2.0)))))
+
+        compose.onNodeWithText(text(R.string.history_empty)).assertExists()
+    }
+
     private fun show(
         resource: ClusterResource?,
         detail: GuestDetail? = null,
+        history: UsageHistory? = null,
+        onTimeframe: (RrdTimeframe) -> Unit = {},
         busyAction: GuestAction? = null,
         canPowerManage: Boolean = true,
         canOpenConsole: Boolean = true,
@@ -143,6 +177,9 @@ class GuestDetailPaneTest {
                 GuestDetailPane(
                     resource = resource,
                     detail = detail,
+                    history = history,
+                    timeframe = RrdTimeframe.Hour,
+                    onTimeframe = onTimeframe,
                     busyAction = busyAction,
                     canPowerManage = canPowerManage,
                     canOpenConsole = canOpenConsole,

@@ -49,6 +49,7 @@ import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
 import io.github.zachelks.proxkeep.ui.cluster.StatusText
 import io.github.zachelks.proxkeep.ui.cluster.statusText
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
@@ -70,12 +71,16 @@ private const val BYTES_PER_MIB = 1024L * 1024L
  * @param busyAction the power action in progress on this guest, if any
  * @param canPowerManage whether the user may start, stop and otherwise control the guest
  * @param canOpenConsole whether the user may open the guest's console
+ * @param history the guest's usage over [timeframe]
  * @param showBack true when the list is not visible beside this pane
  */
 @Composable
 fun GuestDetailPane(
     resource: ClusterResource?,
     detail: GuestDetail?,
+    history: UsageHistory?,
+    timeframe: RrdTimeframe,
+    onTimeframe: (RrdTimeframe) -> Unit,
     busyAction: GuestAction?,
     canPowerManage: Boolean,
     canOpenConsole: Boolean,
@@ -158,6 +163,8 @@ fun GuestDetailPane(
             }
 
             if (resource.status == "running") UsageCard(resource)
+
+            if (!resource.isTemplate) UsageHistoryCard(history, timeframe, onTimeframe)
 
             detail?.error?.let { error ->
                 Text(

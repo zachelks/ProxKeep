@@ -20,6 +20,8 @@ import io.github.zachelks.proxkeep.core.api.model.GuestStatus
 import io.github.zachelks.proxkeep.core.api.model.Permissions
 import io.github.zachelks.proxkeep.core.api.model.Realm
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.RrdPoint
+import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
 import io.github.zachelks.proxkeep.core.api.model.TaskLogLine
 import io.github.zachelks.proxkeep.core.api.model.TaskStatus
 import io.github.zachelks.proxkeep.core.api.model.TaskSummary
@@ -174,6 +176,21 @@ class PveClient(
         require(action.supports(kind)) { "${action.name} is not available for $kind guests" }
         val path = guestPath(node, kind, vmid) + listOf("status", action.apiName)
         return call(post(path, emptyMap()), String.serializer())
+    }
+
+    /** A guest's usage history over [timeframe], oldest sample first. */
+    suspend fun guestRrd(node: String, kind: ResourceKind, vmid: Int, timeframe: RrdTimeframe): List<RrdPoint> =
+        rrd(guestPath(node, kind, vmid), timeframe)
+
+    /** A node's usage history over [timeframe], oldest sample first. */
+    suspend fun nodeRrd(node: String, timeframe: RrdTimeframe): List<RrdPoint> =
+        rrd(listOf("nodes", node), timeframe)
+
+    private suspend fun rrd(base: List<String>, timeframe: RrdTimeframe): List<RrdPoint> {
+        val query = mapOf("timeframe" to timeframe.apiName, "cf" to "AVERAGE")
+        return call(get(base + "rrddata", query = query), ListSerializer(JsonObject.serializer()))
+            .mapNotNull(RrdPoint::fromJson)
+            .sortedBy { it.time }
     }
 
     private fun guestPath(node: String, kind: ResourceKind, vmid: Int): List<String> {

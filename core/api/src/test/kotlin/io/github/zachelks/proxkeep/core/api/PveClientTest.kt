@@ -6,6 +6,7 @@ import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -353,5 +354,28 @@ class PveClientTest {
 
         assertTrue(client.permissions("/vms/100").has("/vms/100", "VM.Console"))
         assertEquals("/api2/json/access/permissions?path=%2Fvms%2F100", server.takeRequest().path)
+    }
+
+    @Test
+    fun usageHistoryIsReadOldestFirstAndKeepsWhatWasRecorded(): Unit = runBlocking {
+        enqueue(
+            """{"data":[
+                {"time":1760400060,"cpu":"0.25","maxcpu":2,"mem":1073741824,"netin":512.5},
+                {"time":1760400000,"cpu":0.1,"maxcpu":2},
+                {"time":1760400120,"maxcpu":2},
+                {"cpu":0.5}]}""",
+        )
+        enqueue("""{"data":[{"time":1760400000,"loadavg":"0.42","memused":2147483648}]}""")
+
+        val guest = client.guestRrd("pve1", ResourceKind.Lxc, 200, RrdTimeframe.Day)
+        assertEquals(listOf(1760400000L, 1760400060L, 1760400120L), guest.map { it.time })
+        assertEquals(0.25, guest[1]["cpu"])
+        assertEquals(512.5, guest[1]["netin"])
+        assertNull(guest[2]["cpu"], "nothing recorded while the guest was off")
+        assertEquals("/api2/json/nodes/pve1/lxc/200/rrddata?timeframe=day&cf=AVERAGE", server.takeRequest().path)
+
+        val node = client.nodeRrd("pve1", RrdTimeframe.Hour)
+        assertEquals(0.42, node.single()["loadavg"])
+        assertEquals("/api2/json/nodes/pve1/rrddata?timeframe=hour&cf=AVERAGE", server.takeRequest().path)
     }
 }

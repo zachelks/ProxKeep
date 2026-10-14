@@ -89,6 +89,8 @@ fun GuestsPane(
     val detail by viewModel.detail.collectAsStateWithLifecycle()
     val busyGuests by viewModel.busyGuests.collectAsStateWithLifecycle()
     val access by viewModel.access.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
+    val timeframe by viewModel.timeframe.collectAsStateWithLifecycle()
 
     val selectedId = navigator.currentDestination?.contentKey
     LaunchedEffect(selectedId) { viewModel.select(selectedId) }
@@ -127,6 +129,9 @@ fun GuestsPane(
                         GuestDetailPane(
                             resource = resource,
                             detail = detail?.takeIf { it.resourceId == selectedId },
+                            history = history?.takeIf { it.resourceId == selectedId },
+                            timeframe = timeframe,
+                            onTimeframe = viewModel::selectTimeframe,
                             busyAction = busyGuests[selectedId],
                             canPowerManage = resource != null && access.allowsOn(resource, Privilege.VM_POWER_MGMT),
                             canOpenConsole = resource != null && access.allowsOn(resource, Privilege.VM_CONSOLE),
