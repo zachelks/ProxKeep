@@ -11,6 +11,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -128,6 +134,8 @@ fun GuestsPane(
                     cluster = loaded,
                     selectedId = selectedId,
                     busyGuests = busyGuests,
+                    canCreate = access?.allows(listOf(CREATE_PATH), Privilege.VM_ALLOCATE) ?: true,
+                    onCreate = { kind -> onOpenRoute(if (kind == ResourceKind.Qemu) Route.CreateVm else Route.CreateContainer) },
                     onSelect = { id ->
                         scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, id) }
                     },
@@ -202,6 +210,9 @@ private fun LifecycleDialogHost(resourceId: String, item: LifecycleMenuItem, gue
 }
 
 /** Whether to offer something that needs [privilege] on [guest]. */
+/** New guests are allocated under this path; a pool member needs the privilege on its pool, which the server checks. */
+private const val CREATE_PATH = "/vms"
+
 private fun ServerAccess?.allowsOn(guest: ClusterResource, privilege: String): Boolean {
     val vmid = guest.vmid ?: return true
     return this?.allows(Permissions.guestPaths(vmid, guest.pool), privilege) ?: true
@@ -213,12 +224,36 @@ private fun GuestList(
     cluster: ClusterState.Loaded,
     selectedId: String?,
     busyGuests: Map<String, GuestAction>,
+    canCreate: Boolean,
+    onCreate: (ResourceKind) -> Unit,
     onSelect: (String) -> Unit,
 ) {
     val guests = cluster.resources.filter { it.isGuest }.sortedBy { it.vmid ?: Int.MAX_VALUE }
+    var createMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = { topBar(stringResource(R.string.destination_guests)) },
+        floatingActionButton = {
+            if (canCreate) {
+                Box {
+                    ExtendedFloatingActionButton(
+                        onClick = { createMenu = true },
+                        text = { Text(stringResource(R.string.action_create_guest)) },
+                        icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                    )
+                    DropdownMenu(expanded = createMenu, onDismissRequest = { createMenu = false }) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.create_vm_title)) }, onClick = {
+                            createMenu = false
+                            onCreate(ResourceKind.Qemu)
+                        })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.create_ct_title)) }, onClick = {
+                            createMenu = false
+                            onCreate(ResourceKind.Lxc)
+                        })
+                    }
+                }
+            }
+        },
     ) { innerPadding ->
         if (guests.isEmpty()) {
             MessageWithAction(

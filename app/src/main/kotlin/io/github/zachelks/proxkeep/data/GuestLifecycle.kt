@@ -16,8 +16,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.IOException
 
-/** A change to a guest's life beyond power: snapshots, backups, moves, copies and removal. */
+/** A change to a guest's life beyond power: creation, snapshots, backups, moves, copies and removal. */
 enum class LifecycleOperation {
+    Create,
     TakeSnapshot,
     RollBack,
     DeleteSnapshot,

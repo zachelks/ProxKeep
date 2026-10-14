@@ -45,6 +45,14 @@ sealed interface Route {
     @Serializable
     data class GuestConfig(val resourceId: String) : Route
 
+    /** The new virtual machine wizard. */
+    @Serializable
+    data object CreateVm : Route
+
+    /** The new container wizard. */
+    @Serializable
+    data object CreateContainer : Route
+
     /** The open remote desktop. */
     @Serializable
     data object Desktop : Route

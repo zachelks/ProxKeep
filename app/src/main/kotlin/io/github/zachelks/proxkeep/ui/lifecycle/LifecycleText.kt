@@ -21,6 +21,7 @@ fun lifecycleViewModel(resourceId: String): LifecycleViewModel {
 private class OperationText(@StringRes val progress: Int, @StringRes val done: Int, @StringRes val failed: Int)
 
 private fun LifecycleOperation.text(): OperationText = when (this) {
+    LifecycleOperation.Create -> OperationText(R.string.progress_create, R.string.done_create, R.string.failed_create)
     LifecycleOperation.TakeSnapshot -> OperationText(R.string.progress_snapshot, R.string.done_snapshot, R.string.failed_snapshot)
     LifecycleOperation.RollBack -> OperationText(R.string.progress_rollback, R.string.done_rollback, R.string.failed_rollback)
     LifecycleOperation.DeleteSnapshot -> OperationText(R.string.progress_delete_snapshot, R.string.done_delete_snapshot, R.string.failed_delete_snapshot)
