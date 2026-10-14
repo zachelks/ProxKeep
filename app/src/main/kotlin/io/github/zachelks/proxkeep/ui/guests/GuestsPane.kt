@@ -54,9 +54,16 @@ import kotlinx.coroutines.launch
  * one. Phones show one at a time; wider windows show them side by side.
  *
  * @param onConsoleOpened called after a guest's console has been opened, to show it
+ * @param guestToOpen a guest to show, for example one picked in search
+ * @param onGuestOpened called once [guestToOpen] is on screen
  */
 @Composable
-fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
+fun GuestsPane(
+    topBar: TopBar,
+    onConsoleOpened: () -> Unit,
+    guestToOpen: String? = null,
+    onGuestOpened: () -> Unit = {},
+) {
     val container = appContainer()
     val viewModel = viewModel {
         GuestsViewModel(
@@ -85,6 +92,12 @@ fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
 
     val selectedId = navigator.currentDestination?.contentKey
     LaunchedEffect(selectedId) { viewModel.select(selectedId) }
+    LaunchedEffect(guestToOpen) {
+        if (guestToOpen != null) {
+            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, guestToOpen)
+            onGuestOpened()
+        }
+    }
 
     val listIsHidden = navigator.scaffoldValue[ListDetailPaneScaffoldRole.List] == PaneAdaptedValue.Hidden
 

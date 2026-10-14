@@ -29,13 +29,14 @@ import io.github.zachelks.proxkeep.data.StoredServers
 import io.github.zachelks.proxkeep.ui.ShellViewModel
 
 /**
- * The app bar of every top-level screen: a title, a refresh button while
- * signed in, and the server menu.
+ * The app bar of every top-level screen: a title, search and a refresh
+ * button while signed in, and the server menu.
  */
 @Composable
 fun MainTopBar(
     title: String,
     viewModel: ShellViewModel,
+    onSearch: () -> Unit,
     onAddServer: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -46,6 +47,12 @@ fun MainTopBar(
         title = { Text(title) },
         actions = {
             if (session is Session.Active) {
+                IconButton(onClick = onSearch) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search),
+                        contentDescription = stringResource(R.string.action_search),
+                    )
+                }
                 IconButton(onClick = viewModel::refresh) {
                     Icon(
                         painter = painterResource(R.drawable.ic_refresh),

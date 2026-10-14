@@ -122,6 +122,8 @@
     <string name="uptime_label">Up %1$s</string>
     <string name="kind_vm">VM</string>
     <string name="kind_container">Container</string>
+    <string name="kind_node">Node</string>
+    <string name="kind_storage">Storage</string>
 
     <!-- Status words -->
     <string name="status_running">Running</string>
@@ -316,4 +318,11 @@
     <string name="console_end_title">End this session?</string>
     <string name="console_end_body">The connection is closed, and anything still running in this terminal is stopped.</string>
     <string name="console_end_confirm">End session</string>
+
+    <!-- Search -->
+    <string name="action_search">Search</string>
+    <string name="action_clear_search">Clear search</string>
+    <string name="search_hint">Search guests, nodes, storage</string>
+    <string name="search_prompt">Search by name, guest ID, node, pool or tag.</string>
+    <string name="search_no_results">Nothing matches “%1$s”.</string>
 </resources>
