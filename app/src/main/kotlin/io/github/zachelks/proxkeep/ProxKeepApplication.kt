@@ -12,6 +12,7 @@ import io.github.zachelks.proxkeep.data.AppSettings
 import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.GuestActions
+import io.github.zachelks.proxkeep.data.GuestLifecycle
 import io.github.zachelks.proxkeep.data.KeyChainKeys
 import io.github.zachelks.proxkeep.data.ProfileStore
 import io.github.zachelks.proxkeep.data.RefreshSignal
@@ -78,6 +79,8 @@ class AppContainer(context: Context) {
     val access = ServerAccessRepository(repository, scope)
 
     val guestActions = GuestActions(repository, refresh, scope)
+
+    val guestLifecycle = GuestLifecycle(repository, refresh, scope)
 
     val consoles = ConsoleManager(context.applicationContext, repository, scope)
 
