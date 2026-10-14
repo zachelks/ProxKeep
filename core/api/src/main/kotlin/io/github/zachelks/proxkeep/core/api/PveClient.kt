@@ -14,7 +14,9 @@ import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
 import io.github.zachelks.proxkeep.core.api.model.BackupCompression
 import io.github.zachelks.proxkeep.core.api.model.BackupMode
 import io.github.zachelks.proxkeep.core.api.model.MigrationCheck
+import io.github.zachelks.proxkeep.core.api.model.NodeNetwork
 import io.github.zachelks.proxkeep.core.api.model.NodeStorage
+import io.github.zachelks.proxkeep.core.api.model.PendingChange
 import io.github.zachelks.proxkeep.core.api.model.Snapshot
 import io.github.zachelks.proxkeep.core.api.model.StorageVolume
 import io.github.zachelks.proxkeep.core.api.model.AgentResult
@@ -162,6 +164,82 @@ class PveClient(
 
     suspend fun guestConfig(node: String, kind: ResourceKind, vmid: Int): GuestConfig =
         GuestConfig.fromJson(call(get(guestPath(node, kind, vmid) + "config"), JsonObject.serializer()))
+
+    // --- Configuration ---------------------------------------------------
+
+    /** Changes that wait for the guest's next start, and the current values beside them. */
+    suspend fun pendingConfig(node: String, kind: ResourceKind, vmid: Int): List<PendingChange> =
+        call(get(guestPath(node, kind, vmid) + "pending"), ListSerializer(JsonObject.serializer()))
+            .mapNotNull(PendingChange::fromJson)
+
+    /**
+     * Changes a guest's configuration. Keys in [delete] are removed, which
+     * for a disk detaches it. With [digest] from [guestConfig], the server
+     * refuses the change when someone else changed the configuration since.
+     *
+     * Virtual machines apply changes as a task, because adding a disk
+     * allocates storage; containers apply them at once.
+     *
+     * @return the task's UPID, or null when the change is already done
+     */
+    suspend fun updateConfig(
+        node: String,
+        kind: ResourceKind,
+        vmid: Int,
+        set: Map<String, String>,
+        delete: Collection<String> = emptyList(),
+        digest: String? = null,
+    ): String? {
+        val form = LinkedHashMap(set)
+        if (delete.isNotEmpty()) form["delete"] = delete.joinToString(",")
+        digest?.let { form["digest"] = it }
+        val path = guestPath(node, kind, vmid) + "config"
+        return callForTask(if (kind == ResourceKind.Qemu) post(path, form) else put(path, form))
+    }
+
+    /**
+     * Grows a disk. Disks cannot shrink.
+     *
+     * @param size the new size, such as `64G`, or an increase, such as `+8G`
+     */
+    suspend fun resizeDisk(node: String, kind: ResourceKind, vmid: Int, disk: String, size: String): String? =
+        callForTask(put(guestPath(node, kind, vmid) + "resize", mapOf("disk" to disk, "size" to size)))
+
+    /** Writes a virtual machine's cloud-init drive again with its current settings. */
+    suspend fun regenerateCloudInit(node: String, vmid: Int) {
+        callForTask(put(guestPath(node, ResourceKind.Qemu, vmid) + "cloudinit", emptyMap()))
+    }
+
+    /** A node's network interfaces; [type] narrows them, for example to `any_bridge`. */
+    suspend fun nodeNetworks(node: String, type: String? = null): List<NodeNetwork> {
+        val query = type?.let { mapOf("type" to it) }.orEmpty()
+        return call(get(listOf("nodes", node, "network"), query = query), ListSerializer(NodeNetwork.serializer()))
+            .sortedBy { it.iface }
+    }
+
+    /** Creates a virtual machine from the parameters of `POST /nodes/{node}/qemu`. Returns the task's UPID. */
+    suspend fun createVm(node: String, parameters: Map<String, String>): String =
+        callForTask(post(listOf("nodes", node, "qemu"), parameters))
+            ?: throw PveApiException(STATUS_OK, "The server did not start a task")
+
+    /** Creates a container from the parameters of `POST /nodes/{node}/lxc`. Returns the task's UPID. */
+    suspend fun createContainer(node: String, parameters: Map<String, String>): String =
+        callForTask(post(listOf("nodes", node, "lxc"), parameters))
+            ?: throw PveApiException(STATUS_OK, "The server did not start a task")
+
+    /**
+     * The API viewer's data file, which describes every path and parameter
+     * of this server's API. Parse it with [ApiSchema.parse].
+     *
+     * @throws PveApiException when the server does not publish it
+     */
+    suspend fun apiSchemaText(): String {
+        val url = baseUrl.resolve(SCHEMA_PATH) ?: throw PveApiException(404, "No API schema")
+        val request = builder(emptyList(), emptyMap(), authenticated = true).url(url).header("Accept", "*/*").get().build()
+        val raw = execute(request)
+        if (raw.code !in 200..299) throw PveApiException(raw.code, raw.message.ifBlank { "The server does not publish its API schema" })
+        return raw.body
+    }
 
     /**
      * Asks the QEMU guest agent inside a virtual machine which operating
@@ -467,9 +545,14 @@ class PveClient(
         authenticated: Boolean = true,
     ): Request = builder(path, query, authenticated).get().build()
 
-    private fun post(path: List<String>, form: Map<String, String>, authenticated: Boolean = true): Request {
+    private fun post(path: List<String>, form: Map<String, String>, authenticated: Boolean = true): Request =
+        write("POST", path, form, authenticated)
+
+    private fun put(path: List<String>, form: Map<String, String>): Request = write("PUT", path, form, authenticated = true)
+
+    private fun write(method: String, path: List<String>, form: Map<String, String>, authenticated: Boolean): Request {
         val body = FormBody.Builder().apply { form.forEach { (name, value) -> add(name, value) } }.build()
-        val request = builder(path, emptyMap(), authenticated).post(body)
+        val request = builder(path, emptyMap(), authenticated).method(method, body)
         // Tickets must prove write requests were not forged; API tokens need no such proof.
         val csrfToken = (credentials as? TicketCredentials)?.csrfToken
         if (authenticated && csrfToken != null) request.header("CSRFPreventionToken", csrfToken)
@@ -559,6 +642,9 @@ class PveClient(
     private companion object {
         const val STATUS_OK = 200
         const val TICKET_COOKIE = "PVEAuthCookie"
+
+        /** Relative to the API root, `/api2/json/`. */
+        const val SCHEMA_PATH = "../../pve-docs/api-viewer/apidata.js"
         val ENVELOPE = ApiEnvelope.serializer(JsonElement.serializer())
 
         /** Fallback for servers that deliver the ticket only as a cookie. */
