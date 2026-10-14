@@ -22,10 +22,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +37,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
@@ -61,19 +66,27 @@ private val SmallestTextSize = 7.sp
 private val LargestTextSize = 36.sp
 
 /**
- * A full-screen terminal for one console: the terminal itself, a row of the
- * keys an on-screen keyboard lacks, and the connection's state.
+ * A full-screen terminal: the console on screen, a row of the keys an
+ * on-screen keyboard lacks, and a switcher between the open consoles.
+ * Leaving the screen keeps every console running; ending one is a separate,
+ * confirmed action.
  */
 @Composable
-fun TerminalScreen(console: ConsoleSession, onClose: () -> Unit, onReconnect: () -> Unit) {
+fun TerminalScreen(
+    sessions: List<ConsoleSession>,
+    console: ConsoleSession,
+    onSelect: (ConsoleSession) -> Unit,
+    onEnd: (ConsoleSession) -> Unit,
+    onReconnect: (ConsoleSession) -> Unit,
+    onLeave: () -> Unit,
+) {
     val state by console.state.collectAsStateWithLifecycle()
-    var confirmingClose by remember { mutableStateOf(false) }
+    var confirmingEnd by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var switcherOpen by remember { mutableStateOf(false) }
+    val labels = sessionLabels(sessions)
 
-    // Leaving ends the shell, so ask first unless it has already ended.
-    val requestClose = {
-        if (state is ConsoleState.Closed) onClose() else confirmingClose = true
-    }
-    BackHandler(onBack = requestClose)
+    BackHandler(onBack = onLeave)
 
     val density = LocalDensity.current
     val modifiers = remember { ModifierKeys() }
@@ -98,22 +111,73 @@ fun TerminalScreen(console: ConsoleSession, onClose: () -> Unit, onReconnect: ()
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(console.title)
-                        Text(text = stateLabel(state), style = MaterialTheme.typography.labelMedium)
+                    Box {
+                        Column(
+                            modifier = Modifier.clickable(
+                                enabled = sessions.size > 1,
+                                onClickLabel = stringResource(R.string.console_switch),
+                            ) { switcherOpen = true },
+                        ) {
+                            Text(labels[console] ?: console.title)
+                            Text(
+                                text = if (sessions.size > 1) {
+                                    pluralStringResource(R.plurals.console_open_count, sessions.size, stateLabel(state), sessions.size)
+                                } else {
+                                    stateLabel(state)
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                        DropdownMenu(expanded = switcherOpen, onDismissRequest = { switcherOpen = false }) {
+                            sessions.forEach { session ->
+                                val sessionState by session.state.collectAsStateWithLifecycle()
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(labels[session] ?: session.title)
+                                            Text(stateLabel(sessionState), style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        RadioButton(selected = session === console, onClick = null)
+                                    },
+                                    onClick = {
+                                        switcherOpen = false
+                                        onSelect(session)
+                                    },
+                                )
+                            }
+                        }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = requestClose) {
+                    IconButton(onClick = onLeave) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_close),
-                            contentDescription = stringResource(R.string.action_close),
+                            painter = painterResource(R.drawable.ic_arrow_back),
+                            contentDescription = stringResource(R.string.action_back),
                         )
                     }
                 },
                 actions = {
                     TextButton(onClick = console::paste, enabled = state is ConsoleState.Connected) {
                         Text(stringResource(R.string.action_paste))
+                    }
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_more_vert),
+                                contentDescription = stringResource(R.string.action_more),
+                            )
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.console_end_confirm)) },
+                                onClick = {
+                                    menuOpen = false
+                                    if (state is ConsoleState.Closed) onEnd(console) else confirmingEnd = true
+                                },
+                            )
+                        }
                     }
                 },
             )
@@ -126,51 +190,69 @@ fun TerminalScreen(console: ConsoleSession, onClose: () -> Unit, onReconnect: ()
                 .consumeWindowInsets(innerPadding)
                 .imePadding(),
         ) {
-            AndroidView(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                factory = { context ->
-                    TerminalView(context, null).apply {
-                        setTerminalViewClient(viewClient)
-                        setTextSize(viewClient.textSize)
-                        setTypeface(Typeface.MONOSPACE)
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        viewClient.view = this
-                        console.view = this
-                        attachSession(console.terminal)
-                        post { viewClient.showKeyboard() }
-                    }
-                },
-            )
+            // A new view for each console, so switching never mixes their screens.
+            key(console.id) {
+                AndroidView(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    factory = { context ->
+                        TerminalView(context, null).apply {
+                            setTerminalViewClient(viewClient)
+                            setTextSize(viewClient.textSize)
+                            setTypeface(Typeface.MONOSPACE)
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                            viewClient.view = this
+                            console.view = this
+                            attachSession(console.terminal)
+                            post { viewClient.showKeyboard() }
+                        }
+                    },
+                )
+            }
             if (state is ConsoleState.Closed) {
-                ClosedBar(onReconnect = onReconnect, onClose = onClose)
+                ClosedBar(onReconnect = { onReconnect(console) }, onClose = { onEnd(console) })
             } else {
                 ExtraKeysRow(modifiers = modifiers, view = { viewClient.view })
             }
         }
     }
 
-    if (confirmingClose) {
+    if (confirmingEnd) {
         AlertDialog(
-            onDismissRequest = { confirmingClose = false },
+            onDismissRequest = { confirmingEnd = false },
             title = { Text(stringResource(R.string.console_end_title)) },
             text = { Text(stringResource(R.string.console_end_body)) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        confirmingClose = false
-                        onClose()
+                        confirmingEnd = false
+                        onEnd(console)
                     },
                 ) {
                     Text(stringResource(R.string.console_end_confirm))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingClose = false }) {
+                TextButton(onClick = { confirmingEnd = false }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
         )
+    }
+}
+
+/** Names for the open consoles. Consoles with the same title are numbered in the order they were opened. */
+internal fun sessionLabels(sessions: List<ConsoleSession>): Map<ConsoleSession, String> {
+    val counts = sessions.groupingBy { it.title }.eachCount()
+    val seen = mutableMapOf<String, Int>()
+    return sessions.associateWith { session ->
+        if ((counts[session.title] ?: 0) < 2) {
+            session.title
+        } else {
+            val number = (seen[session.title] ?: 0) + 1
+            seen[session.title] = number
+            "${session.title} ($number)"
+        }
     }
 }
 

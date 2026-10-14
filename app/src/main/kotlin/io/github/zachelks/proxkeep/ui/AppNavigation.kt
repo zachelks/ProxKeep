@@ -3,7 +3,6 @@ package io.github.zachelks.proxkeep.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -54,22 +53,20 @@ private fun SignInEntry(route: Route.SignIn, navigator: Navigator) {
 @Composable
 private fun TerminalEntry(navigator: Navigator) {
     val consoles = appContainer().consoles
+    val sessions by consoles.sessions.collectAsStateWithLifecycle()
     val console by consoles.current.collectAsStateWithLifecycle()
     val open = console
     if (open == null) {
-        // The console was closed elsewhere, for example by switching server.
+        // Every console has ended, for example by switching server.
         LaunchedEffect(Unit) { navigator.close(Route.Terminal) }
         return
     }
-    // Keyed so a reconnect, which is a new session, gets a fresh terminal view.
-    key(open.id) {
-        TerminalScreen(
-            console = open,
-            onClose = {
-                consoles.close()
-                navigator.close(Route.Terminal)
-            },
-            onReconnect = consoles::reconnect,
-        )
-    }
+    TerminalScreen(
+        sessions = sessions,
+        console = open,
+        onSelect = consoles::select,
+        onEnd = consoles::close,
+        onReconnect = consoles::reconnect,
+        onLeave = { navigator.close(Route.Terminal) },
+    )
 }

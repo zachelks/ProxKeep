@@ -25,6 +25,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 class ConsoleManagerTest {
@@ -49,7 +50,7 @@ class ConsoleManagerTest {
 
     @AfterTest
     fun tearDown() {
-        manager.close()
+        manager.closeAll()
         scope.cancel()
         fixture.close()
     }
@@ -76,27 +77,43 @@ class ConsoleManagerTest {
     }
 
     @Test
-    fun aNewConsoleReplacesTheOpenOne() {
+    fun aNewConsoleKeepsTheOthersRunning() {
         manager.open(shell, title = "pve1")
         val first = assertNotNull(manager.current.value)
 
         manager.open(ConsoleTarget.Guest("pve1", ResourceKind.Qemu, 100), title = "web")
 
+        assertEquals(listOf("pve1", "web"), manager.sessions.value.map { it.title })
         assertEquals("web", manager.current.value?.title)
-        assertFalse(first.terminal.isRunning, "the replaced console is ended")
+        assertTrue(first.terminal.isRunning, "switching never disconnects")
     }
 
     @Test
-    fun reconnectingOpensAFreshConsoleOnTheSameTarget() {
+    fun selectingPutsAnotherConsoleOnScreen() {
         manager.open(shell, title = "pve1")
         val first = assertNotNull(manager.current.value)
+        manager.open(shell, title = "pve1")
 
-        manager.reconnect()
+        manager.select(first)
 
-        val second = assertNotNull(manager.current.value)
-        assertNotSame(first, second)
-        assertEquals(first.target, second.target)
-        assertEquals(first.title, second.title)
+        assertSame(first, manager.current.value)
+    }
+
+    @Test
+    fun reconnectingReplacesTheConsoleInPlace() {
+        manager.open(shell, title = "pve1")
+        val first = assertNotNull(manager.current.value)
+        manager.open(ConsoleTarget.Guest("pve1", ResourceKind.Qemu, 100), title = "web")
+
+        manager.reconnect(first)
+
+        val fresh = manager.sessions.value.first()
+        assertNotSame(first, fresh)
+        assertEquals(first.target, fresh.target)
+        assertEquals("pve1", fresh.title)
+        assertSame(fresh, manager.current.value)
+        assertFalse(first.terminal.isRunning)
+        assertEquals(2, manager.sessions.value.size)
     }
 
     @Test
@@ -107,25 +124,52 @@ class ConsoleManagerTest {
     }
 
     @Test
-    fun closingEndsTheConsole() {
+    fun closingEndsTheConsoleAndShowsTheOneBesideIt() {
+        manager.open(shell, title = "a")
+        manager.open(shell, title = "b")
+        manager.open(shell, title = "c")
+        val middle = manager.sessions.value[1]
+        manager.select(middle)
+
+        manager.close(middle)
+
+        assertFalse(middle.terminal.isRunning)
+        assertEquals(listOf("a", "c"), manager.sessions.value.map { it.title })
+        assertEquals("c", manager.current.value?.title)
+    }
+
+    @Test
+    fun closingTheLastConsoleLeavesNoneOnScreen() {
         manager.open(shell, title = "pve1")
-        val session = assertNotNull(manager.current.value)
 
         manager.close()
 
         assertNull(manager.current.value)
-        assertFalse(session.terminal.isRunning)
+        assertEquals(emptyList(), manager.sessions.value)
     }
 
     @Test
-    fun signingOutClosesTheConsole(): Unit = runBlocking {
+    fun signingOutClosesEveryConsole(): Unit = runBlocking {
         manager.open(shell, title = "pve1")
-        val session = manager.current.value
+        manager.open(shell, title = "pve1")
+        val opened = manager.sessions.value
 
         repository.signOut()
 
         assertNull(manager.current.value)
-        assertFalse(session!!.terminal.isRunning)
+        assertEquals(emptyList(), manager.sessions.value)
+        assertTrue(opened.none { it.terminal.isRunning })
+    }
+
+    @Test
+    fun consolesWithTheSameTitleAreNumbered() {
+        manager.open(shell, title = "pve1")
+        manager.open(ConsoleTarget.Guest("pve1", ResourceKind.Qemu, 100), title = "web")
+        manager.open(shell, title = "pve1")
+
+        val labels = io.github.zachelks.proxkeep.ui.console.sessionLabels(manager.sessions.value)
+
+        assertEquals(listOf("pve1 (1)", "web", "pve1 (2)"), manager.sessions.value.map { labels[it] })
     }
 
     @Test

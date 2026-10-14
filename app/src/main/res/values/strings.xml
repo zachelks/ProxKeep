@@ -319,6 +319,15 @@
     <string name="console_end_title">End this session?</string>
     <string name="console_end_body">The connection is closed, and anything still running in this terminal is stopped.</string>
     <string name="console_end_confirm">End session</string>
+    <string name="console_switch">Switch console</string>
+    <plurals name="open_consoles_description">
+        <item quantity="one">%d open console</item>
+        <item quantity="other">%d open consoles</item>
+    </plurals>
+    <plurals name="console_open_count">
+        <item quantity="one">%1$s · %2$d console open</item>
+        <item quantity="other">%1$s · %2$d consoles open</item>
+    </plurals>
 
     <!-- Search -->
     <string name="action_search">Search</string>

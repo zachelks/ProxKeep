@@ -14,33 +14,80 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 
 /**
- * Owns the open console. It belongs to the app, not to a screen, so a
- * console keeps running while the screen showing it comes and goes.
+ * Owns the open consoles. They belong to the app, not to a screen, so each
+ * keeps running while the screen showing it comes and goes, and while
+ * another console is on screen.
+ *
+ * Call from the main thread.
  */
 class ConsoleManager(
     private val context: Context,
     private val repository: ServerRepository,
     private val scope: CoroutineScope,
 ) {
+    private val _sessions = MutableStateFlow<List<ConsoleSession>>(emptyList())
+
+    /** Every open console, in the order they were opened. */
+    val sessions: StateFlow<List<ConsoleSession>> = _sessions.asStateFlow()
+
     private val _current = MutableStateFlow<ConsoleSession?>(null)
+
+    /** The console on screen, or that was on screen last. */
     val current: StateFlow<ConsoleSession?> = _current.asStateFlow()
 
     init {
         scope.launch {
-            // A console belongs to the server it was opened on. Switching
-            // server or signing out ends it.
+            // Consoles belong to the server they were opened on. Switching
+            // server or signing out ends them.
             repository.activeProfileId
                 .drop(1)
-                .collect { close() }
+                .collect { closeAll() }
         }
     }
 
-    /** Opens a console, replacing any that is already open. */
+    /** Opens a console and puts it on screen. Consoles already open keep running. */
     fun open(target: ConsoleTarget, title: String) {
         if (repository.session.value !is Session.Active) return
-        close()
-        val session = ConsoleSession(context, title, target)
+        val session = start(target, title)
+        _sessions.value = _sessions.value + session
         _current.value = session
+    }
+
+    /** Puts [session] on screen. */
+    fun select(session: ConsoleSession) {
+        if (session in _sessions.value) _current.value = session
+    }
+
+    /** Replaces [session] with a fresh console on the same target, in the same place. */
+    fun reconnect(session: ConsoleSession? = _current.value) {
+        if (session == null || session !in _sessions.value) return
+        if (repository.session.value !is Session.Active) return
+        session.end()
+        val fresh = start(session.target, session.title)
+        _sessions.value = _sessions.value.map { if (it === session) fresh else it }
+        _current.value = fresh
+    }
+
+    /** Ends [session]. The console beside it, if any, comes on screen. */
+    fun close(session: ConsoleSession? = _current.value) {
+        if (session == null) return
+        val before = _sessions.value
+        val index = before.indexOf(session)
+        if (index < 0) return
+        session.end()
+        val after = before - session
+        _sessions.value = after
+        if (_current.value === session) _current.value = after.getOrNull(index) ?: after.lastOrNull()
+    }
+
+    fun closeAll() {
+        _sessions.value.forEach { it.end() }
+        _sessions.value = emptyList()
+        _current.value = null
+    }
+
+    private fun start(target: ConsoleTarget, title: String): ConsoleSession {
+        val session = ConsoleSession(context, title, target)
         scope.launch {
             try {
                 session.attach(repository.request { it.openConsole(target, scope, session.channelListener) })
@@ -50,16 +97,6 @@ class ConsoleManager(
                 session.fail(e.message)
             }
         }
-    }
-
-    /** Opens a fresh console on the same target as the current one. */
-    fun reconnect() {
-        val session = _current.value ?: return
-        open(session.target, session.title)
-    }
-
-    fun close() {
-        _current.value?.end()
-        _current.value = null
+        return session
     }
 }

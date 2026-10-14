@@ -65,6 +65,7 @@ fun MainScreen(navigator: Navigator) {
 
     val session by viewModel.session.collectAsStateWithLifecycle()
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
+    val consoles by container.consoles.sessions.collectAsStateWithLifecycle()
 
     val snackbars = remember { SnackbarHostState() }
     val resources = LocalResources.current
@@ -76,6 +77,8 @@ fun MainScreen(navigator: Navigator) {
         MainTopBar(
             title = title,
             viewModel = viewModel,
+            openConsoles = consoles.size,
+            onOpenConsoles = { navigator.open(Route.Terminal) },
             onSearch = { searching = true },
             onAddServer = { navigator.open(Route.SignIn()) },
             onSettings = { navigator.open(Route.Settings) },
