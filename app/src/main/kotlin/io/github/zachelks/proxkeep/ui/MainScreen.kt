@@ -33,6 +33,7 @@ import io.github.zachelks.proxkeep.ui.components.MainTopBar
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.guests.GuestsPane
 import io.github.zachelks.proxkeep.ui.guests.message
+import io.github.zachelks.proxkeep.ui.lifecycle.message
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.search.SearchScreen
@@ -73,6 +74,9 @@ fun MainScreen(navigator: Navigator) {
     LaunchedEffect(viewModel, resources) {
         viewModel.events.collect { event -> snackbars.showSnackbar(event.message(resources)) }
     }
+    LaunchedEffect(container.guestLifecycle, resources) {
+        container.guestLifecycle.events.collect { event -> snackbars.showSnackbar(event.message(resources)) }
+    }
 
     val topBar: TopBar = { title ->
         MainTopBar(
@@ -112,6 +116,7 @@ fun MainScreen(navigator: Navigator) {
                             topBar = topBar,
                             onConsoleOpened = openTerminal,
                             onDesktopOpened = { navigator.open(Route.Desktop) },
+                            onOpenRoute = navigator::open,
                             guestToOpen = guestToOpen,
                             onGuestOpened = { guestToOpen = null },
                         )

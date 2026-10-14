@@ -33,6 +33,14 @@ sealed interface Route {
     @Serializable
     data object Terminal : Route
 
+    /** A guest's snapshots. @property resourceId the guest's cluster resource ID, such as `qemu/100` */
+    @Serializable
+    data class Snapshots(val resourceId: String) : Route
+
+    /** A guest's backups, and backing it up now. */
+    @Serializable
+    data class Backups(val resourceId: String) : Route
+
     /** The open remote desktop. */
     @Serializable
     data object Desktop : Route

@@ -15,6 +15,8 @@ import io.github.zachelks.proxkeep.ui.addserver.AddServerFlow
 import io.github.zachelks.proxkeep.ui.addserver.AddServerViewModel
 import io.github.zachelks.proxkeep.ui.console.TerminalScreen
 import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
+import io.github.zachelks.proxkeep.ui.lifecycle.BackupsScreen
+import io.github.zachelks.proxkeep.ui.lifecycle.SnapshotsScreen
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.navigation.rememberBackStack
@@ -54,6 +56,8 @@ fun AppNavigation() {
             entry<Route.SignIn> { route -> SignInEntry(route, navigator) }
             entry<Route.Terminal> { TerminalEntry(navigator) }
             entry<Route.Desktop> { DesktopEntry(navigator) }
+            entry<Route.Snapshots> { route -> SnapshotsScreen(route.resourceId, onClose = { navigator.close(route) }) }
+            entry<Route.Backups> { route -> BackupsScreen(route.resourceId, onClose = { navigator.close(route) }) }
         },
     )
 }

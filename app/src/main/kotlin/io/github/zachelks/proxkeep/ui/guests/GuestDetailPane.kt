@@ -50,6 +50,11 @@ import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
+import io.github.zachelks.proxkeep.data.LifecycleOperation
+import io.github.zachelks.proxkeep.ui.lifecycle.LifecycleMenuItem
+import io.github.zachelks.proxkeep.ui.lifecycle.isDestructive
+import io.github.zachelks.proxkeep.ui.lifecycle.label
+import io.github.zachelks.proxkeep.ui.lifecycle.progressLabel
 import io.github.zachelks.proxkeep.ui.cluster.StatusText
 import io.github.zachelks.proxkeep.ui.cluster.statusText
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
@@ -89,7 +94,11 @@ fun GuestDetailPane(
     onAction: (GuestAction) -> Unit,
     onOpenConsole: () -> Unit,
     onOpenDisplay: () -> Unit = {},
+    lifecycleItems: List<LifecycleMenuItem> = emptyList(),
+    lifecycleBusy: LifecycleOperation? = null,
+    onLifecycle: (LifecycleMenuItem) -> Unit = {},
 ) {
+    var lifecycleMenuOpen by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -128,6 +137,41 @@ fun GuestDetailPane(
                             )
                         }
                     }
+                    if (resource != null && lifecycleItems.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { lifecycleMenuOpen = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_more_vert),
+                                    contentDescription = stringResource(R.string.action_guest_menu, resource.name ?: resource.id),
+                                )
+                            }
+                            DropdownMenu(expanded = lifecycleMenuOpen, onDismissRequest = { lifecycleMenuOpen = false }) {
+                                val (gentle, destructive) = lifecycleItems.partition { !it.isDestructive }
+                                gentle.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(item.label)) },
+                                        enabled = lifecycleBusy == null,
+                                        onClick = {
+                                            lifecycleMenuOpen = false
+                                            onLifecycle(item)
+                                        },
+                                    )
+                                }
+                                if (gentle.isNotEmpty() && destructive.isNotEmpty()) HorizontalDivider()
+                                destructive.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(item.label)) },
+                                        enabled = lifecycleBusy == null,
+                                        colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error),
+                                        onClick = {
+                                            lifecycleMenuOpen = false
+                                            onLifecycle(item)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
                 },
             )
         },
@@ -150,10 +194,11 @@ fun GuestDetailPane(
             val paused = detail?.status?.isPaused == true
             StatusRow(resource = resource, paused = paused, lock = detail?.status?.lock ?: resource.lock)
 
-            if (busyAction != null) {
+            val progress = busyAction?.inProgressLabel ?: lifecycleBusy?.progressLabel
+            if (progress != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text(text = stringResource(busyAction.inProgressLabel), style = MaterialTheme.typography.bodyMedium)
+                    Text(text = stringResource(progress), style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
@@ -166,7 +211,7 @@ fun GuestDetailPane(
                         isPaused = paused,
                         isTemplate = resource.isTemplate,
                     ),
-                    enabled = busyAction == null,
+                    enabled = busyAction == null && lifecycleBusy == null,
                     onAction = onAction,
                 )
             }

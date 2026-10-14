@@ -19,6 +19,8 @@ import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.RrdPoint
 import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
+import io.github.zachelks.proxkeep.data.LifecycleOperation
+import io.github.zachelks.proxkeep.ui.lifecycle.LifecycleMenuItem
 import io.github.zachelks.proxkeep.ui.theme.AppTheme
 import org.junit.Rule
 import org.junit.runner.RunWith
@@ -147,6 +149,26 @@ class GuestDetailPaneTest {
     }
 
     @Test
+    fun theGuestMenuKeepsDestructiveItemsApart() {
+        val chosen = mutableListOf<LifecycleMenuItem>()
+        show(running, lifecycleItems = listOf(LifecycleMenuItem.Snapshots, LifecycleMenuItem.Delete), onLifecycle = { chosen += it })
+
+        compose.onNodeWithContentDescription(text(R.string.action_guest_menu, "web")).performClick()
+        compose.onNodeWithText(text(R.string.action_snapshots)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.action_delete_guest)).performClick()
+
+        assertEquals(listOf(LifecycleMenuItem.Delete), chosen)
+    }
+
+    @Test
+    fun aGuestWithALifecycleOperationRunningSaysSoAndTakesNoPowerAction() {
+        show(running, lifecycleBusy = LifecycleOperation.Backup)
+
+        compose.onNodeWithText(text(R.string.progress_backup)).assertIsDisplayed()
+        compose.onNodeWithText(text(R.string.action_shutdown)).assertIsNotEnabled()
+    }
+
+    @Test
     fun aGuestThatIsGoneSaysSo() {
         show(null)
 
@@ -190,6 +212,9 @@ class GuestDetailPaneTest {
         busyAction: GuestAction? = null,
         canPowerManage: Boolean = true,
         canOpenConsole: Boolean = true,
+        lifecycleItems: List<LifecycleMenuItem> = emptyList(),
+        lifecycleBusy: LifecycleOperation? = null,
+        onLifecycle: (LifecycleMenuItem) -> Unit = {},
     ) {
         compose.setContent {
             AppTheme {
@@ -206,6 +231,9 @@ class GuestDetailPaneTest {
                     onBack = {},
                     onAction = { requested += it },
                     onOpenConsole = {},
+                    lifecycleItems = lifecycleItems,
+                    lifecycleBusy = lifecycleBusy,
+                    onLifecycle = onLifecycle,
                 )
             }
         }

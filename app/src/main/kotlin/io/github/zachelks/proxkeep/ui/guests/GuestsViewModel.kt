@@ -15,6 +15,8 @@ import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.GuestActions
+import io.github.zachelks.proxkeep.data.GuestLifecycle
+import io.github.zachelks.proxkeep.data.LifecycleOperation
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.data.ServerAccess
@@ -81,6 +83,7 @@ class GuestsViewModel(
     private val consoles: ConsoleManager,
     private val refreshSignal: RefreshSignal,
     private val desktops: DesktopManager? = null,
+    lifecycle: GuestLifecycle? = null,
 ) : ViewModel() {
 
     val cluster: StateFlow<ClusterState> = clusterRepository.state
@@ -89,6 +92,12 @@ class GuestsViewModel(
     /** Actions in progress on the signed-in server's guests, by resource ID. */
     val busyGuests: StateFlow<Map<String, GuestAction>> =
         combine(actions.busy, servers.activeProfileId) { busy, profileId ->
+            busy.filterKeys { it.profileId == profileId }.mapKeys { it.key.resourceId }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyMap())
+
+    /** Lifecycle operations in progress on the signed-in server's guests, by resource ID. */
+    val lifecycleBusy: StateFlow<Map<String, LifecycleOperation>> =
+        combine(lifecycle?.busy ?: flowOf(emptyMap()), servers.activeProfileId) { busy, profileId ->
             busy.filterKeys { it.profileId == profileId }.mapKeys { it.key.resourceId }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyMap())
 

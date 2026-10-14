@@ -25,6 +25,9 @@ import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -47,6 +50,11 @@ import io.github.zachelks.proxkeep.ui.cluster.StaleBanner
 import io.github.zachelks.proxkeep.ui.cluster.statusText
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
+import io.github.zachelks.proxkeep.ui.lifecycle.LifecycleDialog
+import io.github.zachelks.proxkeep.ui.lifecycle.LifecycleMenuItem
+import io.github.zachelks.proxkeep.ui.lifecycle.availableLifecycleItems
+import io.github.zachelks.proxkeep.ui.lifecycle.lifecycleViewModel
+import io.github.zachelks.proxkeep.ui.navigation.Route
 import kotlinx.coroutines.launch
 
 /**
@@ -55,6 +63,7 @@ import kotlinx.coroutines.launch
  *
  * @param onConsoleOpened called after a guest's console has been opened, to show it
  * @param onDesktopOpened called after a virtual machine's display has been opened, to show it
+ * @param onOpenRoute opens a full screen, such as a guest's snapshots
  * @param guestToOpen a guest to show, for example one picked in search
  * @param onGuestOpened called once [guestToOpen] is on screen
  */
@@ -63,6 +72,7 @@ fun GuestsPane(
     topBar: TopBar,
     onConsoleOpened: () -> Unit,
     onDesktopOpened: () -> Unit = {},
+    onOpenRoute: (Route) -> Unit = {},
     guestToOpen: String? = null,
     onGuestOpened: () -> Unit = {},
 ) {
@@ -76,6 +86,7 @@ fun GuestsPane(
             container.consoles,
             container.refresh,
             container.desktops,
+            container.guestLifecycle,
         )
     }
     val cluster by viewModel.cluster.collectAsStateWithLifecycle()
@@ -91,6 +102,8 @@ fun GuestsPane(
     val scope = rememberCoroutineScope()
     val detail by viewModel.detail.collectAsStateWithLifecycle()
     val busyGuests by viewModel.busyGuests.collectAsStateWithLifecycle()
+    val lifecycleBusy by viewModel.lifecycleBusy.collectAsStateWithLifecycle()
+    var lifecycleDialog by remember { mutableStateOf<Pair<String, LifecycleMenuItem>?>(null) }
     val access by viewModel.access.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val timeframe by viewModel.timeframe.collectAsStateWithLifecycle()
@@ -153,12 +166,38 @@ fun GuestsPane(
                                     onDesktopOpened()
                                 }
                             },
+                            lifecycleItems = resource?.let { guest ->
+                                val onlineNodes = loaded.resources.count { it.kind == ResourceKind.Node && it.status == "online" }
+                                availableLifecycleItems(guest, { privilege -> access.allowsOn(guest, privilege) }, onlineNodes)
+                            }.orEmpty(),
+                            lifecycleBusy = lifecycleBusy[selectedId],
+                            onLifecycle = { item ->
+                                when (item) {
+                                    LifecycleMenuItem.Snapshots -> onOpenRoute(Route.Snapshots(selectedId))
+                                    LifecycleMenuItem.Backups -> onOpenRoute(Route.Backups(selectedId))
+                                    else -> lifecycleDialog = selectedId to item
+                                }
+                            },
                         )
                     }
                 }
             }
         },
     )
+
+    lifecycleDialog?.let { (resourceId, item) ->
+        LifecycleDialogHost(resourceId, item, loaded.resources.firstOrNull { it.id == resourceId }) { lifecycleDialog = null }
+    }
+}
+
+@Composable
+private fun LifecycleDialogHost(resourceId: String, item: LifecycleMenuItem, guest: ClusterResource?, onDone: () -> Unit) {
+    if (guest == null) {
+        // The guest is gone, for example deleted elsewhere.
+        LaunchedEffect(Unit) { onDone() }
+        return
+    }
+    LifecycleDialog(item, guest, lifecycleViewModel(resourceId), onDone)
 }
 
 /** Whether to offer something that needs [privilege] on [guest]. */
