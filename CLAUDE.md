@@ -88,6 +88,13 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - `StorageTransfers` runs uploads and downloads at app level, like `GuestLifecycle`, so they outlive the screen; they end with the process. Uploads stream from a `ContentResolver` in `PveClient.upload`, with no write timeout.
 - `BackupJobsViewModel.runPlan` runs a job now on each node that holds its guests, because a backup runs where its guests are. `GuestLifecycle.restoreAsNew` and `backupKind` serve restoring a backup beside its guest.
 
+**Datacenter.**
+- `DatacenterScreen` lists the datacenter's sections (`DATACENTER_GROUPS`). Each entry names a schema path, and entries the server's schema lacks are hidden; all show while the schema is unknown.
+- Most sections are collections described in `Collections.kt`: list path, ID key, item path and display keys, all schema templates such as `/access/users/{userid}/token/{tokenid}`. `CollectionScreen` and `CollectionViewModel` list, delete and act on them for any entry; editing and creating open `SchemaEditScreen`. Add a section by adding a `CollectionSpec`, not a screen.
+- Path values go through `CollectionSpec.fill`, which encodes slashes with `encodePathValue`; `PveClient` decodes each segment, so `10.0.0.0/8` stays one segment.
+- Permissions have no item paths, so they are removed with `PUT /access/acl` and `delete=1` (`aclRemoval`). A write that returns a secret, such as a new API token, shows it once (`SchemaEditViewModel.secret`).
+- Ceph's status is hand-designed (`CephScreen`), since its JSON changes between Ceph releases; `CephStatus.fromJson` reads what is there.
+
 **Background work.**
 - `StatusWorker` (WorkManager) runs while alerts are on or a widget or tile is placed. It checks every saved server it can reach without the person (`ServerRepository.backgroundClient`: the session's client, an API token, or a saved password without a second factor) and records the signed-in server's `StatusSnapshot`. A saved password rejected in the background is forgotten, as on sign-in.
 - `AlertChecker` is plain and tested: the first check of a server only records what it sees; later ones report failed tasks and nodes going offline or coming back. `AlertNotifier` keeps details off the lock screen.
@@ -141,4 +148,6 @@ VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 6, Nodes, storage and alerts.** Done in code: node management (summary and history, updates with an upgrade console, services, network interfaces, DNS and time, certificates, disks and SMART, the system journal, reboot and shutdown), the storage browser with uploads, downloads from a URL and the template catalog, storage configuration, backup jobs, restoring as a new guest, background alerts, a status widget, a Quick Settings tile and app shortcuts. Not yet confirmed against a real server. Transfers stop if Android ends the app's process; a foreground service would keep them going. The network tab does not show the pending configuration's difference.
 
-**Milestones 7 to 9.** Not started.
+**Milestone 7, Datacenter.** Done in code: cluster options, access control (users, API tokens, groups, pools, roles, permissions, realms), the datacenter firewall, high availability, replication, SDN, Ceph status and pools, and notifications. Not yet confirmed against a real server. Not done: two-factor management, node and guest firewalls, Ceph OSD and monitor management, and a summary of what applying SDN changes.
+
+**Milestones 8 and 9.** Not started.
