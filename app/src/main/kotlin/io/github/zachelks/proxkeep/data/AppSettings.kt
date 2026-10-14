@@ -28,6 +28,21 @@ enum class LockTimeout(val seconds: Int) {
 }
 
 /** The text sizes the terminal can take, in sp. */
+/** How often background checks run. Android runs periodic work at most every 15 minutes. */
+enum class AlertInterval(val minutes: Int) {
+    FifteenMinutes(15),
+    ThirtyMinutes(30),
+    OneHour(60),
+    ThreeHours(180),
+    ;
+
+    companion object {
+        val Default = FifteenMinutes
+
+        fun fromMinutes(minutes: Int): AlertInterval = entries.firstOrNull { it.minutes == minutes } ?: Default
+    }
+}
+
 val TERMINAL_TEXT_SIZES_SP = 7..36
 
 const val DEFAULT_TEXT_SIZE_SP = 14
@@ -91,6 +106,37 @@ class AppSettings(context: Context) {
         _terminalPalette.value = palette
     }
 
+    private val _alertsEnabled = MutableStateFlow(preferences.getBoolean(KEY_ALERTS, false))
+
+    /** Whether the app checks servers in the background and notifies about problems. */
+    val alertsEnabled: StateFlow<Boolean> = _alertsEnabled.asStateFlow()
+
+    private val _alertKinds = MutableStateFlow(
+        AlertKinds(preferences.getBoolean(KEY_ALERT_TASKS, true), preferences.getBoolean(KEY_ALERT_NODES, true)),
+    )
+    val alertKinds: StateFlow<AlertKinds> = _alertKinds.asStateFlow()
+
+    private val _alertInterval = MutableStateFlow(AlertInterval.fromMinutes(preferences.getInt(KEY_ALERT_INTERVAL, AlertInterval.Default.minutes)))
+    val alertInterval: StateFlow<AlertInterval> = _alertInterval.asStateFlow()
+
+    fun setAlertsEnabled(enabled: Boolean) {
+        preferences.edit { putBoolean(KEY_ALERTS, enabled) }
+        _alertsEnabled.value = enabled
+    }
+
+    fun setAlertKinds(kinds: AlertKinds) {
+        preferences.edit {
+            putBoolean(KEY_ALERT_TASKS, kinds.failedTasks)
+            putBoolean(KEY_ALERT_NODES, kinds.offlineNodes)
+        }
+        _alertKinds.value = kinds
+    }
+
+    fun setAlertInterval(interval: AlertInterval) {
+        preferences.edit { putInt(KEY_ALERT_INTERVAL, interval.minutes) }
+        _alertInterval.value = interval
+    }
+
     fun setLockEnabled(enabled: Boolean) {
         preferences.edit { putBoolean(KEY_LOCK_ENABLED, enabled) }
         _lockEnabled.value = enabled
@@ -108,5 +154,9 @@ class AppSettings(context: Context) {
         const val KEY_TEXT_SIZE = "terminal_text_size_sp"
         const val KEY_FONT = "terminal_font"
         const val KEY_PALETTE = "terminal_palette"
+        const val KEY_ALERTS = "alerts_enabled"
+        const val KEY_ALERT_TASKS = "alerts_failed_tasks"
+        const val KEY_ALERT_NODES = "alerts_offline_nodes"
+        const val KEY_ALERT_INTERVAL = "alerts_interval_minutes"
     }
 }

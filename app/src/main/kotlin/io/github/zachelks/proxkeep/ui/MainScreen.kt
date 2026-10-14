@@ -54,6 +54,10 @@ fun MainScreen(navigator: Navigator) {
     val container = appContainer()
     val viewModel = viewModel { ShellViewModel(container.repository, container.guestActions, container.refresh) }
     var destination by rememberSaveable { mutableStateOf(TopLevelDestination.Overview) }
+    val requestedDestination by container.pendingNavigation.destination.collectAsStateWithLifecycle()
+    LaunchedEffect(requestedDestination) {
+        container.pendingNavigation.takeDestination()?.let { destination = it }
+    }
     var searching by rememberSaveable { mutableStateOf(false) }
 
     // A guest picked in search, until the Guests pane has opened it.

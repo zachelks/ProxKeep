@@ -217,6 +217,49 @@ class ServerRepository(
         }
     }
 
+    /**
+     * A client for [profile] that works without the person, for background
+     * checks: the session's own client when [profile] is signed in, or one
+     * with its API token or its saved password. Null when none of these
+     * works, for example when a password sign-in needs a second factor.
+     *
+     * A saved password the server rejects is forgotten, as on sign-in, so
+     * background checks never lock an account.
+     */
+    suspend fun backgroundClient(profile: ServerProfile): PveClient? {
+        (_session.value as? Session.Active)?.takeIf { it.profile.id == profile.id }?.let { return it.client }
+        val headers = withContext(Dispatchers.IO) { savedHeaders(profile) } ?: return null
+        val options = try {
+            connectionOptions(headers, profile.clientCertAlias)
+        } catch (e: IllegalArgumentException) {
+            return null
+        }
+        val client = newClient(profile.address, profile.pinnedSha256, options)
+        return when (profile.authMethod) {
+            AuthMethod.ApiToken -> {
+                val secret = profile.encryptedSecret?.let { withContext(Dispatchers.IO) { secrets.decrypt(it) } } ?: return null
+                client.withCredentials(ApiTokenCredentials(profile.principal, secret))
+            }
+            AuthMethod.Password -> {
+                val password = withContext(Dispatchers.IO) { savedPassword(profile) } ?: return null
+                try {
+                    when (val result = client.login(profile.principal.substringBeforeLast('@'), profile.principal.substringAfterLast('@'), password)) {
+                        is LoginResult.Success -> client.withCredentials(result.credentials)
+                        is LoginResult.SecondFactorRequired -> null
+                    }
+                } catch (e: PveApiException) {
+                    if (e.isAuthenticationFailure) {
+                        mutex.withLock {
+                            _servers.value.profiles.firstOrNull { it.id == profile.id }?.let { forgetPassword(it) }
+                        }
+                    }
+                    null
+                }
+            }
+            AuthMethod.Web -> null
+        }
+    }
+
     /** The password saved for [profile], or null if there is none or it cannot be decrypted here. */
     fun savedPassword(profile: ServerProfile): String? = profile.encryptedPassword?.let(secrets::decrypt)
 

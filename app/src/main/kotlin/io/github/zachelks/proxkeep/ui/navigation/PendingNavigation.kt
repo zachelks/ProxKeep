@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep.ui.navigation
 
+import io.github.zachelks.proxkeep.ui.TopLevelDestination
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,4 +20,15 @@ class PendingNavigation {
 
     /** Returns the waiting route, if any, and forgets it. */
     fun take(): Route? = _route.value.also { _route.value = null }
+
+    private val _destination = MutableStateFlow<TopLevelDestination?>(null)
+
+    /** A top-level destination to show, such as Tasks from an alert. */
+    val destination: StateFlow<TopLevelDestination?> = _destination.asStateFlow()
+
+    fun requestDestination(destination: TopLevelDestination) {
+        _destination.value = destination
+    }
+
+    fun takeDestination(): TopLevelDestination? = _destination.value.also { _destination.value = null }
 }

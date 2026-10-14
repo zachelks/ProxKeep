@@ -44,6 +44,11 @@ fun AppNavigation() {
     LaunchedEffect(requested) {
         pending.take()?.let(navigator::open)
     }
+    // A destination is shown on the main screen, so whatever is over it closes.
+    val destination by pending.destination.collectAsStateWithLifecycle()
+    LaunchedEffect(destination) {
+        if (destination != null) navigator.backToMain()
+    }
 
     NavDisplay(
         backStack = backStack,

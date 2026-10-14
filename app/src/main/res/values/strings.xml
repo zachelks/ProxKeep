@@ -902,4 +902,25 @@
     <string name="restore_unique">Give it new network addresses</string>
     <string name="done_restore_new">Guest %1$s restored</string>
     <string name="failed_restore_new">Couldn\'t restore guest %1$s</string>
+    <!-- Alerts -->
+    <string name="settings_alerts_section">Alerts</string>
+    <string name="settings_alerts">Background checks</string>
+    <string name="settings_alerts_summary">Notifies you about failed tasks and nodes that go offline.</string>
+    <string name="settings_alerts_tasks">Failed tasks, such as backups</string>
+    <string name="settings_alerts_nodes">Nodes going offline and coming back</string>
+    <string name="settings_alerts_every">Check every</string>
+    <string name="settings_alerts_note">Servers are checked when the phone has a network. A server signed in with a password is checked only if its password is saved and it needs no second factor; API tokens always work. Android may check less often to save battery.</string>
+    <string name="alert_interval_15">15 minutes</string>
+    <string name="alert_interval_30">30 minutes</string>
+    <string name="alert_interval_60">Hour</string>
+    <string name="alert_interval_180">3 hours</string>
+    <string name="alerts_channel">Alerts</string>
+    <string name="alerts_channel_description">Failed tasks and offline nodes on your servers</string>
+    <string name="alerts_public_title">A server needs attention</string>
+    <string name="alert_task_failed">%1$s failed</string>
+    <string name="alert_task_detail">On %1$s: %2$s</string>
+    <string name="alert_node_offline">%1$s is offline</string>
+    <string name="alert_node_offline_detail">The cluster cannot reach this node.</string>
+    <string name="alert_node_online">%1$s is back online</string>
+    <string name="alert_node_online_detail">The cluster can reach this node again.</string>
 </resources>

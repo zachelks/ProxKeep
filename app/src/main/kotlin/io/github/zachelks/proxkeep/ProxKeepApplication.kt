@@ -6,27 +6,29 @@ import android.os.SystemClock
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import io.github.zachelks.proxkeep.alerts.AlertWorker
 import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.console.ConsoleService
 import io.github.zachelks.proxkeep.data.AppSettings
-import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.GuestActions
 import io.github.zachelks.proxkeep.data.GuestLifecycle
 import io.github.zachelks.proxkeep.data.KeyChainKeys
 import io.github.zachelks.proxkeep.data.ProfileStore
 import io.github.zachelks.proxkeep.data.RefreshSignal
-import io.github.zachelks.proxkeep.data.SecretBox
 import io.github.zachelks.proxkeep.data.SchemaRepository
+import io.github.zachelks.proxkeep.data.SecretBox
 import io.github.zachelks.proxkeep.data.ServerAccessRepository
-import io.github.zachelks.proxkeep.data.StorageTransfers
 import io.github.zachelks.proxkeep.data.ServerRepository
+import io.github.zachelks.proxkeep.data.StorageTransfers
+import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.security.AppLock
 import io.github.zachelks.proxkeep.security.Authenticator
 import io.github.zachelks.proxkeep.ui.navigation.PendingNavigation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -110,6 +112,12 @@ class AppContainer(context: Context) {
                 palette.applyToTerminals()
                 consoles.refreshColors()
             }
+        }
+        // Background checks follow the alert settings; a change replaces the schedule.
+        scope.launch {
+            combine(settings.alertsEnabled, settings.alertInterval) { enabled, interval -> enabled to interval }
+                .distinctUntilChanged()
+                .collect { (enabled, interval) -> AlertWorker.schedule(context.applicationContext, enabled, interval) }
         }
         // Open consoles keep the process alive in the background. The service stops itself after the last one.
         scope.launch {

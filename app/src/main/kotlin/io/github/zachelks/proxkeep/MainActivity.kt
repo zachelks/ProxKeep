@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.zachelks.proxkeep.ui.AppRoot
+import io.github.zachelks.proxkeep.ui.TopLevelDestination
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.theme.AppTheme
 import kotlinx.coroutines.launch
@@ -40,8 +41,10 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handle(intent: Intent?) {
-        if (intent?.action == ACTION_OPEN_TERMINAL) {
-            (application as ProxKeepApplication).container.pendingNavigation.request(Route.Terminal)
+        val navigation = (application as ProxKeepApplication).container.pendingNavigation
+        when (intent?.action) {
+            ACTION_OPEN_TERMINAL -> navigation.request(Route.Terminal)
+            ACTION_OPEN_TASKS -> navigation.requestDestination(TopLevelDestination.Tasks)
         }
     }
 
@@ -64,5 +67,8 @@ class MainActivity : FragmentActivity() {
     companion object {
         /** Opens the terminal, from the console notification. */
         const val ACTION_OPEN_TERMINAL = "io.github.zachelks.proxkeep.action.OPEN_TERMINAL"
+
+        /** Opens the task list, from an alert. */
+        const val ACTION_OPEN_TASKS = "io.github.zachelks.proxkeep.action.OPEN_TASKS"
     }
 }
