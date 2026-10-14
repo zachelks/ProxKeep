@@ -38,7 +38,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 
 ## Modules
 
-- `core:api`: a plain Kotlin/JVM module with no Android dependencies. It holds the Proxmox client (`PveClient`), models, lenient JSON, TLS trust and the console websocket. Keep Android types out of it so its tests run on the JVM against `MockWebServer`, including real TLS handshakes.
+- `core:api`: a plain Kotlin/JVM module with no Android dependencies. It holds the Proxmox client (`PveClient`), models, lenient JSON, TLS trust, the console websocket and the VNC client (`vnc/`). Keep Android types out of it so its tests run on the JVM against `MockWebServer`, including real TLS handshakes.
 - `app`: the Android application.
 - `terminal:emulator` and `terminal:view` are vendored from Termux. They are unmodified apart from a rewritten `TerminalSession.java`, which uses a `Transport` instead of a local process. Read `terminal/README.md` before you touch them. Keep changes out of these modules where possible, so upstream updates stay a copy-over.
 
@@ -73,6 +73,11 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 
 **App lock.** `AppLock` holds the timing rules and has no Android dependencies, so it is unit-tested. `ProcessLifecycleOwner` drives it from `ProxKeepApplication`. While the app is locked, `AppRoot` composes only `LockScreen`, so nothing behind the lock fetches or shows data. `MainActivity` is a `FragmentActivity` because `BiometricPrompt` requires one.
 
+**Remote desktop.**
+- `RfbClient` (core:api `vnc/`) speaks the VNC protocol: versions 3.3 to 3.8, no authentication or VNC passwords, and the Raw, CopyRect and ZRLE encodings, with resizes and a client-drawn pointer. `VncConnection` carries it over the server's `vncwebsocket` relay, with the bytes in binary messages; `PveClient.openDesktop` asks for a VNC proxy with a generated password first.
+- `DesktopManager` holds at most one `DesktopSession` at the app level, like the consoles. `DesktopScreen` draws the framebuffer into a bitmap, copying only the changed region.
+- Input rules are plain, tested classes: `GestureInterpreter` turns touches into pointer actions for both pointer modes, `Viewport` does fit, zoom and pan, `DesktopController` applies them and the sticky modifiers, and `Keysyms` maps Android keys to X11 keysyms. Keep this logic out of the composable.
+
 **Consoles.**
 - `PveClient.openConsole` asks the server for a terminal proxy, then connects through its websocket relay.
 - `ConsoleChannel` implements the pve-xtermjs framing: a ticket handshake, then `OK`, data and resize frames, and a 30 s keep-alive. The console websocket has no read timeout, because idle shells are quiet.
@@ -93,6 +98,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 
 - The API client is hand-written, not generated from the Proxmox schema.
 - Termux's terminal libraries are GPLv3 only, not Apache 2.0 as the spec says. See the license note above.
+- The remote desktop uses a VNC client written in Kotlin in core:api, not LibVNCClient. It speaks the protocol over the websocket directly, so the spec's local socket bridge and the NDK build are not needed.
 
 ## Milestone progress
 
@@ -102,8 +108,10 @@ Not yet confirmed against a real server:
 - Console with an API token.
 - Web sign-in. Security keys in the WebView need the server's domain to publish Digital Asset Links for the app. Without that, a security-key account signs in with a password and code, or an API token.
 
-Of the three prototypes the spec puts first, VNC over the websocket is not started.
+VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 2, Terminal.** Done in code: the websocket session layer, several consoles at once, a foreground service that keeps them connected, a customizable extra-keys row with key repeat and function keys, hardware keyboard, pinch zoom, font and color scheme settings, selection, copy and paste. A long editing session against a real server still needs checking by hand.
 
-**Milestones 3 to 9.** Not started.
+**Milestone 3, Remote desktop.** Done in code: the VNC client, touch and trackpad pointer modes, zoom, the extra-keys bar, hardware keyboard and mouse, clipboard both ways, immersive mode and picture-in-picture. Not yet confirmed against real Windows and Linux guests. Not done: external displays, pointer capture for a mouse, and QEMU's extended key events for keyboard layouts other than the server's.
+
+**Milestones 4 to 9.** Not started.
