@@ -10,6 +10,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.zachelks.proxkeep.ui.AppRoot
 import io.github.zachelks.proxkeep.ui.TopLevelDestination
+import io.github.zachelks.proxkeep.ui.navigation.GuestRequest
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.theme.AppTheme
 import kotlinx.coroutines.launch
@@ -45,6 +46,12 @@ class MainActivity : FragmentActivity() {
         when (intent?.action) {
             ACTION_OPEN_TERMINAL -> navigation.request(Route.Terminal)
             ACTION_OPEN_TASKS -> navigation.requestDestination(TopLevelDestination.Tasks)
+            ACTION_OPEN_SEARCH -> navigation.requestSearch()
+            ACTION_OPEN_GUEST -> {
+                val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
+                val resourceId = intent.getStringExtra(EXTRA_RESOURCE_ID)
+                if (profileId != null && resourceId != null) navigation.requestGuest(GuestRequest(profileId, resourceId))
+            }
         }
     }
 
@@ -68,7 +75,15 @@ class MainActivity : FragmentActivity() {
         /** Opens the terminal, from the console notification. */
         const val ACTION_OPEN_TERMINAL = "io.github.zachelks.proxkeep.action.OPEN_TERMINAL"
 
-        /** Opens the task list, from an alert. */
+        /** Opens the task list, from an alert or an app shortcut. */
         const val ACTION_OPEN_TASKS = "io.github.zachelks.proxkeep.action.OPEN_TASKS"
+
+        /** Opens search, from an app shortcut. */
+        const val ACTION_OPEN_SEARCH = "io.github.zachelks.proxkeep.action.OPEN_SEARCH"
+
+        /** Opens a guest, from a shortcut to a guest opened recently. */
+        const val ACTION_OPEN_GUEST = "io.github.zachelks.proxkeep.action.OPEN_GUEST"
+        const val EXTRA_PROFILE_ID = "profile_id"
+        const val EXTRA_RESOURCE_ID = "resource_id"
     }
 }

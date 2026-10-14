@@ -6,7 +6,7 @@ import android.os.SystemClock
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import io.github.zachelks.proxkeep.alerts.AlertWorker
+import io.github.zachelks.proxkeep.alerts.StatusWorker
 import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.console.ConsoleService
 import io.github.zachelks.proxkeep.data.AppSettings
@@ -20,16 +20,20 @@ import io.github.zachelks.proxkeep.data.SchemaRepository
 import io.github.zachelks.proxkeep.data.SecretBox
 import io.github.zachelks.proxkeep.data.ServerAccessRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
+import io.github.zachelks.proxkeep.data.StatusSnapshot
 import io.github.zachelks.proxkeep.data.StorageTransfers
 import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.security.AppLock
 import io.github.zachelks.proxkeep.security.Authenticator
+import io.github.zachelks.proxkeep.status.StatusSurfaces
+import io.github.zachelks.proxkeep.ui.guests.removeGuestShortcuts
 import io.github.zachelks.proxkeep.ui.navigation.PendingNavigation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -78,7 +82,15 @@ class AppContainer(context: Context) {
 
     val refresh = RefreshSignal()
 
-    val cluster = ClusterRepository(repository, refresh, scope)
+    val statusSurfaces = StatusSurfaces(context.applicationContext)
+
+    // While the app shows the cluster, its widget and tile follow along without a background check.
+    val cluster = ClusterRepository(repository, refresh, scope) { loaded ->
+        val profile = repository.servers.value.profiles.firstOrNull { it.id == loaded.profileId } ?: return@ClusterRepository
+        if (statusSurfaces.placed.value) {
+            scope.launch { statusSurfaces.update(StatusSnapshot.of(profile, loaded.resources, System.currentTimeMillis())) }
+        }
+    }
 
     val access = ServerAccessRepository(repository, scope)
 
@@ -113,11 +125,24 @@ class AppContainer(context: Context) {
                 consoles.refreshColors()
             }
         }
-        // Background checks follow the alert settings; a change replaces the schedule.
+        // Background checks run for alerts and for a placed widget or tile; a change replaces the schedule.
         scope.launch {
-            combine(settings.alertsEnabled, settings.alertInterval) { enabled, interval -> enabled to interval }
+            combine(settings.alertsEnabled, settings.alertInterval, statusSurfaces.placed) { alerts, interval, placed -> (alerts || placed) to interval }
                 .distinctUntilChanged()
-                .collect { (enabled, interval) -> AlertWorker.schedule(context.applicationContext, enabled, interval) }
+                .collect { (enabled, interval) -> StatusWorker.schedule(context.applicationContext, enabled, interval) }
+        }
+        // Shortcuts to a removed server's guests would open nothing.
+        scope.launch {
+            var known: Set<String>? = null
+            repository.servers.collect { stored ->
+                val ids = stored.profiles.map { it.id }.toSet()
+                known?.minus(ids)?.forEach { removeGuestShortcuts(context.applicationContext, it) }
+                if (repository.loaded.value) known = ids
+            }
+        }
+        // The widget and tile hide server details while the app lock is on.
+        scope.launch {
+            settings.lockEnabled.drop(1).collect { if (statusSurfaces.placed.value) statusSurfaces.redraw() }
         }
         // Open consoles keep the process alive in the background. The service stops itself after the last one.
         scope.launch {

@@ -46,8 +46,9 @@ fun AppNavigation() {
     }
     // A destination is shown on the main screen, so whatever is over it closes.
     val destination by pending.destination.collectAsStateWithLifecycle()
-    LaunchedEffect(destination) {
-        if (destination != null) navigator.backToMain()
+    val search by pending.search.collectAsStateWithLifecycle()
+    LaunchedEffect(destination, search) {
+        if (destination != null || search) navigator.backToMain()
     }
 
     NavDisplay(

@@ -1,6 +1,6 @@
 package io.github.zachelks.proxkeep.data
 
-import io.github.zachelks.proxkeep.alerts.AlertWorker
+import io.github.zachelks.proxkeep.alerts.StatusWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -92,7 +92,7 @@ class AlertsTest {
         val store = MemoryAlertStore(mapOf(fixture.profile.id to ServerAlertState(lastTaskEnd = 1000), "removed" to ServerAlertState()))
         tasks = "[${task("UPID:new", 1200, "failed")}]"
 
-        val alerts = AlertWorker.checkAll(repository, store, all)
+        val alerts = StatusWorker.checkAll(repository, store, all)
 
         assertEquals(listOf("UPID:new"), alerts.filterIsInstance<Alert.TaskFailed>().map { it.upid })
         assertEquals(setOf(fixture.profile.id), store.state.keys)

@@ -59,9 +59,24 @@ fun MainScreen(navigator: Navigator) {
         container.pendingNavigation.takeDestination()?.let { destination = it }
     }
     var searching by rememberSaveable { mutableStateOf(false) }
+    val searchRequested by container.pendingNavigation.search.collectAsStateWithLifecycle()
+    LaunchedEffect(searchRequested) {
+        if (container.pendingNavigation.takeSearch()) searching = true
+    }
 
     // A guest picked in search, until the Guests pane has opened it.
     var guestToOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    // A shortcut to a guest on another saved server switches to that server first.
+    val guestRequested by container.pendingNavigation.guest.collectAsStateWithLifecycle()
+    LaunchedEffect(guestRequested) {
+        val request = container.pendingNavigation.takeGuest() ?: return@LaunchedEffect
+        val current = (container.repository.session.value as? Session.Active)?.profile?.id
+        if (current != request.profileId && container.repository.servers.value.profiles.any { it.id == request.profileId }) {
+            container.repository.activate(request.profileId)
+        }
+        destination = TopLevelDestination.Guests
+        guestToOpen = request.resourceId
+    }
 
     // Back from another destination returns to Overview before leaving the app.
     BackHandler(enabled = destination != TopLevelDestination.Overview) {

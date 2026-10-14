@@ -31,4 +31,30 @@ class PendingNavigation {
     }
 
     fun takeDestination(): TopLevelDestination? = _destination.value.also { _destination.value = null }
+
+    private val _search = MutableStateFlow(false)
+
+    /** Whether the search overlay was asked for, from an app shortcut. */
+    val search: StateFlow<Boolean> = _search.asStateFlow()
+
+    fun requestSearch() {
+        _search.value = true
+    }
+
+    fun takeSearch(): Boolean = _search.value.also { _search.value = false }
+
+    private val _guest = MutableStateFlow<GuestRequest?>(null)
+
+    /** A guest to show, from a shortcut to it. */
+    val guest: StateFlow<GuestRequest?> = _guest.asStateFlow()
+
+    fun requestGuest(request: GuestRequest) {
+        _guest.value = request
+        _destination.value = TopLevelDestination.Guests
+    }
+
+    fun takeGuest(): GuestRequest? = _guest.value.also { _guest.value = null }
 }
+
+/** A guest on a server, by the server's profile ID and the guest's cluster resource ID. */
+data class GuestRequest(val profileId: String, val resourceId: String)

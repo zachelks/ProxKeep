@@ -3,6 +3,7 @@
 package io.github.zachelks.proxkeep.ui.guests
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -10,13 +11,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.res.painterResource
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.Icon
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -31,12 +30,14 @@ import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +50,7 @@ import io.github.zachelks.proxkeep.core.api.model.Privilege
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.ServerAccess
+import io.github.zachelks.proxkeep.data.Session
 import io.github.zachelks.proxkeep.ui.TopBar
 import io.github.zachelks.proxkeep.ui.appContainer
 import io.github.zachelks.proxkeep.ui.cluster.ClusterContent
@@ -116,6 +118,13 @@ fun GuestsPane(
 
     val selectedId = navigator.currentDestination?.contentKey
     LaunchedEffect(selectedId) { viewModel.select(selectedId) }
+    val context = LocalContext.current
+    val session by container.repository.session.collectAsStateWithLifecycle()
+    LaunchedEffect(selectedId) {
+        val active = session as? Session.Active ?: return@LaunchedEffect
+        val guest = loaded.resources.firstOrNull { it.id == selectedId } ?: return@LaunchedEffect
+        pushGuestShortcut(context, active.profile.id, active.profile.name, guest)
+    }
     LaunchedEffect(guestToOpen) {
         if (guestToOpen != null) {
             navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, guestToOpen)

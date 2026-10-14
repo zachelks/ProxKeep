@@ -33,9 +33,9 @@ class AlertSchedulingTest {
 
     @Test
     fun checksAreScheduledWhileAlertsAreOn() {
-        AlertWorker.schedule(context, enabled = true, interval = AlertInterval.OneHour)
+        StatusWorker.schedule(context, enabled = true, interval = AlertInterval.OneHour)
         assertEquals(WorkInfo.State.ENQUEUED, state())
-        AlertWorker.schedule(context, enabled = false, interval = AlertInterval.OneHour)
+        StatusWorker.schedule(context, enabled = false, interval = AlertInterval.OneHour)
         assertEquals(WorkInfo.State.CANCELLED, state())
     }
 

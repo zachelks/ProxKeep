@@ -923,4 +923,26 @@
     <string name="alert_node_offline_detail">The cluster cannot reach this node.</string>
     <string name="alert_node_online">%1$s is back online</string>
     <string name="alert_node_online_detail">The cluster can reach this node again.</string>
+    <!-- Widget, tile and shortcuts -->
+    <string name="status_widget_label">Server status</string>
+    <string name="status_widget_description">How many of the signed-in server\'s nodes are online and guests running</string>
+    <string name="status_tile_label">Server status</string>
+    <string name="status_locked">Unlock the app to see server status.</string>
+    <string name="status_none">Open the app and sign in to a server.</string>
+    <plurals name="status_nodes_online">
+        <item quantity="one">%1$d node online</item>
+        <item quantity="other">All %1$d nodes online</item>
+    </plurals>
+    <plurals name="status_nodes_offline">
+        <item quantity="one">%1$d of %2$d node offline</item>
+        <item quantity="other">%1$d of %2$d nodes offline</item>
+    </plurals>
+    <plurals name="status_guests_running">
+        <item quantity="one">%1$d of %2$d guest running</item>
+        <item quantity="other">%1$d of %2$d guests running</item>
+    </plurals>
+    <string name="status_updated">Updated %1$s</string>
+    <string name="shortcut_search">Search</string>
+    <string name="shortcut_tasks">Tasks</string>
+    <string name="shortcut_guest_long">%1$s on %2$s</string>
 </resources>
