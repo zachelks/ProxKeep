@@ -36,6 +36,7 @@ import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.guests.GuestsPane
 import io.github.zachelks.proxkeep.ui.guests.message
 import io.github.zachelks.proxkeep.ui.lifecycle.message
+import io.github.zachelks.proxkeep.ui.manager.ManagerHome
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.search.SearchScreen
@@ -120,10 +121,17 @@ fun MainScreen(navigator: Navigator) {
     }
     val openTerminal = { navigator.open(Route.Terminal) }
 
-    // A Backup Server has screens of its own.
-    if (product == Product.Pbs) {
-        BackupServerHome(topBar = topBar, snackbars = snackbars, onOpenRoute = navigator::open)
-        return
+    // A Backup Server and a Datacenter Manager have screens of their own.
+    when (product) {
+        Product.Pbs -> {
+            BackupServerHome(topBar = topBar, snackbars = snackbars, onOpenRoute = navigator::open)
+            return
+        }
+        Product.Pdm -> {
+            ManagerHome(topBar = topBar, snackbars = snackbars, onOpenRoute = navigator::open)
+            return
+        }
+        Product.Pve -> Unit
     }
 
     // The search covers the destinations while it is open.

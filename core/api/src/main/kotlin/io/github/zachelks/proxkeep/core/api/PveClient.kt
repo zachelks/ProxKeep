@@ -759,16 +759,34 @@ class PveClient(
 
     /**
      * Recent and running tasks across the cluster, newest first. A Backup
-     * Server or Datacenter Manager has no cluster, so its own tasks are read.
+     * Server has no cluster, so its own tasks are read. A Datacenter Manager
+     * adds the tasks of its remotes to its own.
      */
-    suspend fun clusterTasks(): List<TaskSummary> = if (product == Product.Pve) {
-        call(get(listOf("cluster", "tasks")), ListSerializer(TaskSummary.serializer()))
-    } else {
-        call(get(listOf("nodes", "localhost", "tasks"), query = mapOf("limit" to TASK_LIST_LIMIT.toString())), ListSerializer(TaskSummary.serializer()))
+    suspend fun clusterTasks(): List<TaskSummary> {
+        val tasks = ListSerializer(TaskSummary.serializer())
+        if (product == Product.Pve) return call(get(listOf("cluster", "tasks")), tasks)
+        val own = call(get(listOf("nodes", "localhost", "tasks"), query = mapOf("limit" to TASK_LIST_LIMIT.toString())), tasks)
+        if (product != Product.Pdm) return own
+        val remote = try {
+            call(get(listOf("remote-tasks", "list"), query = mapOf("limit" to TASK_LIST_LIMIT.toString())), tasks)
+        } catch (e: PveApiException) {
+            // An older manager without the remote task list still shows its own.
+            emptyList()
+        }
+        return (own + remote).sortedByDescending { it.starttime ?: 0 }
+    }
+
+    /**
+     * The path of a task. A Datacenter Manager relays a remote's tasks under
+     * the remote, whose name comes before the `!` of the task's ID.
+     */
+    private fun taskPath(node: String, upid: String): List<String> {
+        val remote = upid.substringBefore('!', "").takeIf { it.isNotEmpty() && product == Product.Pdm }
+        return if (remote != null) listOf("pve", "remotes", remote, "tasks", upid) else listOf("nodes", node, "tasks", upid)
     }
 
     suspend fun taskStatus(node: String, upid: String): TaskStatus =
-        call(get(listOf("nodes", node, "tasks", upid, "status")), TaskStatus.serializer())
+        call(get(taskPath(node, upid) + "status"), TaskStatus.serializer())
 
     /**
      * Reads part of a task's log.
@@ -778,7 +796,7 @@ class PveClient(
      */
     suspend fun taskLog(node: String, upid: String, start: Int = 0, limit: Int = 500): List<TaskLogLine> {
         val query = mapOf("start" to start.toString(), "limit" to limit.toString())
-        return call(get(listOf("nodes", node, "tasks", upid, "log"), query = query), ListSerializer(TaskLogLine.serializer()))
+        return call(get(taskPath(node, upid) + "log", query = query), ListSerializer(TaskLogLine.serializer()))
     }
 
     // --- Plumbing --------------------------------------------------------

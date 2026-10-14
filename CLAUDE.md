@@ -97,12 +97,17 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - `SectionList` renders any list of `DatacenterGroup`s, so the Backup Server's administration reuses it.
 
 **Products.** A profile names its `Product`: Proxmox VE, Backup Server or Datacenter Manager. The product sets the default port, the ticket cookie, the API token header and where the schema is published; `PveClient` carries it and keeps it across `withCredentials`. All three share the `/api2/json` layout, sign-in, realms, second factors and tasks, so one client serves them. `PveClient.clusterTasks` reads `/nodes/localhost/tasks` on the products without a cluster.
-- `MainScreen` shows the VE destinations for Proxmox VE and hands over to `BackupServerHome` for a Backup Server. Search, the widget's snapshot and offline-node alerts are VE only; failed-task alerts work for every product.
+- `MainScreen` shows the VE destinations for Proxmox VE and hands over to `BackupServerHome` for a Backup Server and `ManagerHome` for a Datacenter Manager. Search, the widget's snapshot and offline-node alerts are VE only; failed-task alerts work for every product.
 
 **Backup Server.**
 - The calls are extension functions in core:api `pbs/BackupServer.kt`, built on `PveClient.read` and `write`. The server calls itself `localhost` (`PBS_NODE`).
 - `BackupServerHome` has three destinations: datastores (the server's status and each datastore's space), tasks (the shared `TasksPane`) and administration (`BACKUP_SERVER_GROUPS`, through the collection engine: datastore configuration, sync, verify and prune jobs, remotes, traffic control, users, services, updates, network, DNS, time, disks and notifications).
 - `DatastoreScreen` browses a datastore's groups by namespace and runs garbage collection, verification and pruning; long tasks are reported once started and followed in Tasks. `BackupGroupScreen` verifies, protects and deletes snapshots, and previews a prune with a dry run before applying it.
+
+**Datacenter Manager.**
+- The calls are in core:api `pdm/DatacenterManager.kt`. `/resources/list` gives every remote's resources in one call; a remote the manager cannot reach carries an `error`.
+- A remote's tasks have IDs of the form `remote!UPID:…`. `PveClient.taskStatus` and `taskLog` follow them under `/pve/remotes/{remote}/tasks`, so `awaitTask`, schema forms and the task log work for them unchanged. `clusterTasks` adds `/remote-tasks/list` to the manager's own tasks.
+- `ManagerViewModel` serves `ManagerHome`: remotes with node and guest counts, resources across remotes with search and filters (`filterResources`), tasks and administration (`MANAGER_GROUPS`). `RemoteGuestDialog` starts, shuts down and stops a remote guest. Migration, within a cluster or to another remote, opens the schema form of the manager's own `migrate` and `remote-migrate` calls, so it offers what the manager's version takes.
 
 **Background work.**
 - `StatusWorker` (WorkManager) runs while alerts are on or a widget or tile is placed. It checks every saved server it can reach without the person (`ServerRepository.backgroundClient`: the session's client, an API token, or a saved password without a second factor) and records the signed-in server's `StatusSnapshot`. A saved password rejected in the background is forgotten, as on sign-in.
@@ -161,4 +166,4 @@ VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 8, Backup Server.** Done in code: a product choice when adding a server, the server's status, datastores with space, deduplication and estimated full date, namespaces, backup groups and snapshots, garbage collection, verification, pruning with a preview, protection and deletion, sync, verify and prune jobs with run now, remotes, datastore configuration and the server's administration. Not yet confirmed against a real server. Not done: tape, restoring single files, two-factor and permission management, and the Backup Server's own node screen.
 
-**Milestone 9.** Not started.
+**Milestone 9, Datacenter Manager.** Done in code: remotes with their state, resources across remotes with search, power actions on remote guests, migration within a cluster and between remotes, remote tasks, adding and editing remotes, and the manager's administration. Not yet confirmed against a real server. Not done: the manager's dashboards and views, SDN across remotes, a remote's own screens through the manager, and the widget for a manager.

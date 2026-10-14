@@ -1119,4 +1119,48 @@
     <string name="pbs_network_apply">Apply network changes</string>
     <string name="pbs_network_apply_body">Applies the pending network configuration. A mistake can make the server unreachable.</string>
     <string name="pbs_network_applied">Network changes applied.</string>
+
+    <!-- Proxmox Datacenter Manager -->
+    <string name="pdm_remotes">Remotes</string>
+    <string name="pdm_destination_resources">Resources</string>
+    <string name="pdm_group_remotes">Remotes</string>
+    <string name="pdm_no_remotes">This manager has no remotes yet. Add a cluster or Backup Server in Administration.</string>
+    <string name="pdm_remote_unknown_type">Remote</string>
+    <string name="pdm_remote_unreachable">Unreachable</string>
+    <plurals name="pdm_remote_count">
+        <item quantity="one">%1$d remote</item>
+        <item quantity="other">%1$d remotes</item>
+    </plurals>
+    <plurals name="pdm_nodes_online">
+        <item quantity="one">%1$d of %2$d node online</item>
+        <item quantity="other">%1$d of %2$d nodes online</item>
+    </plurals>
+    <plurals name="pdm_guests_running">
+        <item quantity="one">%1$d of %2$d guest running</item>
+        <item quantity="other">%1$d of %2$d guests running</item>
+    </plurals>
+    <plurals name="pdm_remotes_unreachable">
+        <item quantity="one">%1$d remote cannot be reached</item>
+        <item quantity="other">%1$d remotes cannot be reached</item>
+    </plurals>
+    <string name="pdm_search">Search by name, ID, node or remote</string>
+    <string name="pdm_filter_all">All</string>
+    <string name="pdm_filter_guests">Guests</string>
+    <string name="pdm_filter_nodes">Nodes</string>
+    <string name="pdm_filter_storage">Storage</string>
+    <string name="pdm_no_matches">Nothing matches.</string>
+    <string name="pdm_kind_vm">Virtual machine</string>
+    <string name="pdm_kind_ct">Container</string>
+    <string name="pdm_kind_node">Node</string>
+    <string name="pdm_kind_storage">Storage</string>
+    <string name="pdm_kind_other">Other</string>
+    <string name="pdm_guest_title_vm">VM %1$d · %2$s</string>
+    <string name="pdm_guest_title_ct">CT %1$d · %2$s</string>
+    <string name="pdm_migrate">Migrate</string>
+    <string name="pdm_migrate_within">To another node of this cluster</string>
+    <string name="pdm_migrate_across">To another remote</string>
+    <string name="pdm_migrate_within_title">Migrate %1$s</string>
+    <string name="pdm_migrate_across_title">Migrate %1$s to another remote</string>
+    <string name="pdm_action_done">Done.</string>
+    <string name="pdm_action_failed">The task failed.</string>
 </resources>
