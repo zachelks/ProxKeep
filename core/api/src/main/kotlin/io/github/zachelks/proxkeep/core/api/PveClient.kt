@@ -11,6 +11,12 @@ import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
 import io.github.zachelks.proxkeep.core.api.console.TermProxyTicket
 import io.github.zachelks.proxkeep.core.api.json.PveJson
 import io.github.zachelks.proxkeep.core.api.model.ApiEnvelope
+import io.github.zachelks.proxkeep.core.api.model.BackupCompression
+import io.github.zachelks.proxkeep.core.api.model.BackupMode
+import io.github.zachelks.proxkeep.core.api.model.MigrationCheck
+import io.github.zachelks.proxkeep.core.api.model.NodeStorage
+import io.github.zachelks.proxkeep.core.api.model.Snapshot
+import io.github.zachelks.proxkeep.core.api.model.StorageVolume
 import io.github.zachelks.proxkeep.core.api.model.AgentResult
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
@@ -36,6 +42,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback
@@ -254,6 +261,166 @@ class PveClient(
         return VncConnection.connect(http, request, ticket.password ?: ticket.ticket, listener)
     }
 
+    // --- Guest lifecycle -------------------------------------------------
+    //
+    // Each call starts a task on the server and returns its UPID; follow it
+    // with awaitTask. A call that returns null finished at once.
+
+    /** The guest's snapshots, with the `current` row last. */
+    suspend fun snapshots(node: String, kind: ResourceKind, vmid: Int): List<Snapshot> =
+        call(get(guestPath(node, kind, vmid) + "snapshot"), ListSerializer(Snapshot.serializer()))
+
+    /** @param includeMemory saves a running virtual machine's memory too, so a rollback resumes it */
+    suspend fun createSnapshot(node: String, kind: ResourceKind, vmid: Int, name: String, description: String?, includeMemory: Boolean): String? {
+        val form = buildMap {
+            put("snapname", name)
+            if (!description.isNullOrBlank()) put("description", description)
+            if (kind == ResourceKind.Qemu && includeMemory) put("vmstate", "1")
+        }
+        return callForTask(post(guestPath(node, kind, vmid) + "snapshot", form))
+    }
+
+    suspend fun rollbackSnapshot(node: String, kind: ResourceKind, vmid: Int, name: String): String? =
+        callForTask(post(guestPath(node, kind, vmid) + listOf("snapshot", name, "rollback"), emptyMap()))
+
+    suspend fun deleteSnapshot(node: String, kind: ResourceKind, vmid: Int, name: String): String? =
+        callForTask(delete(guestPath(node, kind, vmid) + listOf("snapshot", name)))
+
+    /** The storages [node] can use, optionally only those holding [content], such as `backup`. */
+    suspend fun nodeStorage(node: String, content: String? = null): List<NodeStorage> {
+        val query = content?.let { mapOf("content" to it) }.orEmpty()
+        return call(get(listOf("nodes", node, "storage"), query = query), ListSerializer(NodeStorage.serializer()))
+    }
+
+    /** The volumes on a storage, optionally only one kind of [content] and one guest's. */
+    suspend fun storageContent(node: String, storage: String, content: String? = null, vmid: Int? = null): List<StorageVolume> {
+        val query = buildMap {
+            if (content != null) put("content", content)
+            if (vmid != null) put("vmid", vmid.toString())
+        }
+        return call(get(listOf("nodes", node, "storage", storage, "content"), query = query), ListSerializer(StorageVolume.serializer()))
+    }
+
+    /** Backs up one guest to [storage] now. */
+    suspend fun backupNow(
+        node: String,
+        vmid: Int,
+        storage: String,
+        mode: BackupMode,
+        compression: BackupCompression,
+        notes: String? = null,
+    ): String? {
+        val form = buildMap {
+            put("vmid", vmid.toString())
+            put("storage", storage)
+            put("mode", mode.apiName)
+            put("compress", compression.apiName)
+            if (!notes.isNullOrBlank()) put("notes-template", notes)
+        }
+        return callForTask(post(listOf("nodes", node, "vzdump"), form))
+    }
+
+    /**
+     * Restores a backup [archive] as guest [vmid].
+     *
+     * @param overwrite replaces an existing guest with that ID, which must be stopped
+     * @param storage where the restored disks go, or null for where they were
+     */
+    suspend fun restore(
+        node: String,
+        kind: ResourceKind,
+        vmid: Int,
+        archive: String,
+        overwrite: Boolean,
+        storage: String? = null,
+        start: Boolean = false,
+    ): String? {
+        val form = buildMap {
+            put("vmid", vmid.toString())
+            when (kind) {
+                ResourceKind.Qemu -> put("archive", archive)
+                ResourceKind.Lxc -> {
+                    put("ostemplate", archive)
+                    put("restore", "1")
+                }
+                else -> throw IllegalArgumentException("$kind is not a guest")
+            }
+            if (overwrite) put("force", "1")
+            if (storage != null) put("storage", storage)
+            if (start) put("start", "1")
+        }
+        val type = if (kind == ResourceKind.Qemu) "qemu" else "lxc"
+        return callForTask(post(listOf("nodes", node, type), form))
+    }
+
+    /** What stands in the way of moving a virtual machine. Containers have no such check. */
+    suspend fun migrationCheck(node: String, vmid: Int): MigrationCheck =
+        call(get(guestPath(node, ResourceKind.Qemu, vmid) + "migrate"), MigrationCheck.serializer())
+
+    /**
+     * Moves a guest to [target]. A running virtual machine moves while it
+     * runs; a running container is restarted on the target.
+     *
+     * @param withLocalDisks copies disks on storage the target does not share
+     */
+    suspend fun migrate(node: String, kind: ResourceKind, vmid: Int, target: String, running: Boolean, withLocalDisks: Boolean): String? {
+        val form = buildMap {
+            put("target", target)
+            if (running) put(if (kind == ResourceKind.Qemu) "online" else "restart", "1")
+            if (kind == ResourceKind.Qemu && withLocalDisks) put("with-local-disks", "1")
+        }
+        return callForTask(post(guestPath(node, kind, vmid) + "migrate", form))
+    }
+
+    /** The lowest guest ID not in use. */
+    suspend fun nextId(): Int =
+        call(get(listOf("cluster", "nextid")), String.serializer()).trim().toIntOrNull()
+            ?: throw PveApiException(STATUS_OK, "The server sent no usable guest ID")
+
+    /**
+     * Copies a guest as [newId].
+     *
+     * @param full copies every disk; otherwise a template's clone shares its disks where the storage allows
+     * @param targetNode where the copy goes, or null for this node
+     * @param storage where a full copy's disks go, or null for where they are
+     */
+    suspend fun clone(
+        node: String,
+        kind: ResourceKind,
+        vmid: Int,
+        newId: Int,
+        name: String?,
+        full: Boolean,
+        targetNode: String? = null,
+        storage: String? = null,
+    ): String? {
+        val form = buildMap {
+            put("newid", newId.toString())
+            if (!name.isNullOrBlank()) put(if (kind == ResourceKind.Qemu) "name" else "hostname", name)
+            put("full", if (full) "1" else "0")
+            if (targetNode != null && targetNode != node) put("target", targetNode)
+            if (storage != null && full) put("storage", storage)
+        }
+        return callForTask(post(guestPath(node, kind, vmid) + "clone", form))
+    }
+
+    /** Turns a stopped guest into a template. This cannot be undone. */
+    suspend fun convertToTemplate(node: String, kind: ResourceKind, vmid: Int): String? =
+        callForTask(post(guestPath(node, kind, vmid) + "template", emptyMap()))
+
+    /**
+     * Deletes a stopped guest and its disks.
+     *
+     * @param purge also removes it from backup jobs, replication and high availability
+     */
+    suspend fun deleteGuest(node: String, kind: ResourceKind, vmid: Int, purge: Boolean): String? {
+        val query = buildMap {
+            if (purge) put("purge", "1")
+            put("destroy-unreferenced-disks", "1")
+        }
+        return callForTask(delete(guestPath(node, kind, vmid), query))
+    }
+
     // --- Tasks -----------------------------------------------------------
 
     /** Recent and running tasks across the cluster, newest first. */
@@ -309,8 +476,31 @@ class PveClient(
         return request.build()
     }
 
+    private fun delete(path: List<String>, query: Map<String, String> = emptyMap()): Request {
+        val request = builder(path, query, authenticated = true).delete()
+        val csrfToken = (credentials as? TicketCredentials)?.csrfToken
+        if (csrfToken != null) request.header("CSRFPreventionToken", csrfToken)
+        return request.build()
+    }
+
     private suspend fun <T> call(request: Request, deserializer: DeserializationStrategy<T>): T =
         decode(execute(request), deserializer)
+
+    /** For calls that start a task: its UPID, or null when the server finished the work at once. */
+    private suspend fun callForTask(request: Request): String? {
+        val raw = execute(request)
+        if (raw.code in 200..299) {
+            val data = try {
+                PveJson.decodeFromString(ENVELOPE, raw.body).data
+            } catch (ignored: SerializationException) {
+                null
+            } catch (ignored: IllegalArgumentException) {
+                null
+            }
+            if (data == null || data is JsonNull) return null
+        }
+        return decode(raw, String.serializer())
+    }
 
     private suspend fun execute(request: Request): RawResponse = http.newCall(request).await()
 

@@ -73,4 +73,10 @@ object Privilege {
     const val VM_POWER_MGMT = "VM.PowerMgmt"
     const val VM_CONSOLE = "VM.Console"
     const val SYS_CONSOLE = "Sys.Console"
+    const val VM_SNAPSHOT = "VM.Snapshot"
+    const val VM_SNAPSHOT_ROLLBACK = "VM.Snapshot.Rollback"
+    const val VM_BACKUP = "VM.Backup"
+    const val VM_MIGRATE = "VM.Migrate"
+    const val VM_CLONE = "VM.Clone"
+    const val VM_ALLOCATE = "VM.Allocate"
 }
