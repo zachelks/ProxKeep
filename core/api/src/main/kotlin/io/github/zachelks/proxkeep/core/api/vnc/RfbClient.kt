@@ -105,6 +105,7 @@ class RfbClient(
         val height = input.readUnsignedShort()
         readBytes(PIXEL_FORMAT_LENGTH) // The server's own format; the client asks for its own below.
         val name = readString()
+        checkScreenSize(width, height)
         framebuffer = Framebuffer(width, height)
 
         output.write(setPixelFormat())
@@ -189,6 +190,7 @@ class RfbClient(
                     zrle.decode(data, x, y, w, h, framebuffer)
                 }
                 ENCODING_DESKTOP_SIZE -> {
+                    checkScreenSize(w, h)
                     framebuffer.resize(w, h)
                     listener.onResized(w, h)
                     damage = Region(0, 0, w, h)
@@ -208,6 +210,7 @@ class RfbClient(
     }
 
     private fun readCursor(hotX: Int, hotY: Int, w: Int, h: Int) {
+        if (w > MAX_CURSOR_SIZE || h > MAX_CURSOR_SIZE) throw RfbException("The pointer is too large")
         val colors = readBytes(w * h * 4)
         val maskRow = (w + 7) / 8
         val mask = readBytes(maskRow * h)
@@ -218,6 +221,11 @@ class RfbClient(
             if (visible) pixel(colors, i * 4) else 0
         }
         listener.onCursor(Cursor(w, h, hotX, hotY, pixels))
+    }
+
+    /** A screen beyond [MAX_SCREEN_PIXELS] would not fit in memory, whatever the server asks for. */
+    private fun checkScreenSize(width: Int, height: Int) {
+        if (width.toLong() * height > MAX_SCREEN_PIXELS) throw RfbException("The screen is too large to show ($width×$height)")
     }
 
     private fun checkBounds(x: Int, y: Int, w: Int, h: Int) {
@@ -343,5 +351,11 @@ class RfbClient(
         const val MAX_STRING = 64 * 1024
         const val MAX_CUT_TEXT = 1024 * 1024
         const val MAX_COMPRESSED = 64 * 1024 * 1024
+
+        /** 4096 × 4096, which holds 4K and ultrawide screens. Each pixel takes 4 bytes. */
+        const val MAX_SCREEN_PIXELS = 4096L * 4096L
+
+        /** Pointers are 32 to 64 pixels wide; this leaves room for scaled ones. */
+        const val MAX_CURSOR_SIZE = 256
     }
 }

@@ -355,6 +355,41 @@ class RfbClientTest {
         assertIs<RfbException>(failure)
     }
 
+    @Test
+    fun aScreenTooLargeToHoldIsRefused() {
+        handshake()
+
+        // 65535 × 65535 pixels would need 16 GiB.
+        update(1) { rectangle(0, 0, 65535, 65535, -223) }
+        worker.join(5_000)
+
+        assertIs<RfbException>(failure)
+    }
+
+    @Test
+    fun anOversizedPointerIsRefused() {
+        handshake()
+
+        update(1) { rectangle(0, 0, 4096, 4096, -239) }
+        worker.join(5_000)
+
+        assertIs<RfbException>(failure)
+    }
+
+    @Test
+    fun compressedDataThatInflatesBeyondItsRectangleIsRefused() {
+        handshake()
+
+        update(1) {
+            rectangle(0, 0, 1, 1, 16)
+            // A 1-pixel rectangle holds at most a few hundred bytes, not a megabyte.
+            ZrleTestEncoder().writeRect(server) { repeat(1 shl 20) { write(1) } }
+        }
+        worker.join(5_000)
+
+        assertIs<RfbException>(failure)
+    }
+
     /** The VNC challenge answer, worked out independently of the client. */
     private fun expectedAuth(challenge: ByteArray, password: String): ByteArray {
         val key = ByteArray(8)

@@ -18,7 +18,7 @@ internal class ZrleDecoder {
 
     /** Decodes one rectangle's [compressed] data into [framebuffer]. */
     fun decode(compressed: ByteArray, x: Int, y: Int, width: Int, height: Int, framebuffer: Framebuffer) {
-        val data = Reader(inflate(compressed))
+        val data = Reader(inflate(compressed, maxDecodedSize(width, height)))
         var tileY = 0
         while (tileY < height) {
             val th = minOf(TILE_SIZE, height - tileY)
@@ -33,14 +33,21 @@ internal class ZrleDecoder {
         }
     }
 
-    private fun inflate(compressed: ByteArray): ByteArray {
+    /**
+     * Inflates one rectangle's data, which can never be longer than [limit];
+     * more means the data is damaged or hostile.
+     */
+    private fun inflate(compressed: ByteArray, limit: Long): ByteArray {
         inflater.setInput(compressed)
-        val out = ByteArrayOutputStream(compressed.size * 4)
+        val out = ByteArrayOutputStream(minOf(compressed.size.toLong() * 4, limit).toInt())
         val buffer = ByteArray(BUFFER_SIZE)
         try {
             while (true) {
                 val n = inflater.inflate(buffer)
                 if (n > 0) out.write(buffer, 0, n)
+                if (out.size() > limit) throw RfbException("A compressed rectangle holds more than its pixels")
+                // ZRLE never uses a preset dictionary; asking for one would otherwise loop forever.
+                if (inflater.needsDictionary()) throw RfbException("The server sent damaged compressed data")
                 if (n == 0 && (inflater.needsInput() || inflater.finished())) break
             }
         } catch (e: DataFormatException) {
@@ -101,6 +108,16 @@ internal class ZrleDecoder {
         }
     }
 
+    /**
+     * The most a [width] by [height] rectangle can take once inflated. A
+     * pixel takes at most 4 bytes, in a plain run-length tile with runs of
+     * one; each tile adds its type byte and at most a 127-color palette.
+     */
+    private fun maxDecodedSize(width: Int, height: Int): Long {
+        val tiles = ((width + TILE_SIZE - 1) / TILE_SIZE).toLong() * ((height + TILE_SIZE - 1) / TILE_SIZE)
+        return width.toLong() * height * MAX_BYTES_PER_PIXEL + tiles * MAX_TILE_OVERHEAD
+    }
+
     private fun checkRun(at: Int, run: Int, count: Int) {
         if (at + run > count) throw RfbException("A run goes past the end of its tile")
     }
@@ -137,6 +154,8 @@ internal class ZrleDecoder {
         const val RAW = 0
         const val SOLID = 1
         const val PLAIN_RLE = 128
+        const val MAX_BYTES_PER_PIXEL = 4
+        const val MAX_TILE_OVERHEAD = 1 + 127 * 3
     }
 }
 
