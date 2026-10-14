@@ -344,4 +344,20 @@
     <string name="chart_description">%1$s chart.</string>
     <string name="chart_series_description">%1$s: latest %2$s, peak %3$s.</string>
     <string name="history_empty">Nothing was recorded in this period.</string>
+
+    <!-- Reverse proxy -->
+    <string name="proxy_show">Reverse proxy settings</string>
+    <string name="proxy_hide">Hide reverse proxy settings</string>
+    <string name="proxy_intro">Only needed when a reverse proxy in front of the server asks for them. Header values are stored encrypted.</string>
+    <string name="proxy_headers">Extra headers</string>
+    <string name="field_header_name">Header name</string>
+    <string name="field_header_value">Value</string>
+    <string name="action_add_header">Add header</string>
+    <string name="action_remove_header">Remove header</string>
+    <string name="proxy_client_certificate">Client certificate</string>
+    <string name="proxy_no_certificate">None</string>
+    <string name="action_choose_certificate">Choose</string>
+    <string name="action_remove_certificate">Remove</string>
+    <string name="error_invalid_header">A header has a name or value that can\'t be sent. Names use letters, digits and dashes; values use plain ASCII.</string>
+    <string name="error_client_certificate_unavailable">The client certificate is no longer available. Choose it again.</string>
 </resources>

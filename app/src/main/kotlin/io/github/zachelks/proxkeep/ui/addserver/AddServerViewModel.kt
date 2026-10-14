@@ -13,7 +13,12 @@ class AddServerViewModel(repository: ServerRepository, profileId: String?) : Vie
 
     private val existing = profileId?.let { id -> repository.servers.value.profiles.firstOrNull { it.id == id } }
 
-    val state = AddServerState(repository, viewModelScope, existing)
+    val state = AddServerState(
+        repository,
+        viewModelScope,
+        existing,
+        existingHeaders = existing?.let(repository::savedHeaders).orEmpty(),
+    )
 
     init {
         // Signing in to a saved server starts by contacting it straight away.

@@ -2,7 +2,11 @@
 
 package io.github.zachelks.proxkeep.ui.addserver
 
+import android.os.Handler
+import android.os.Looper
+import android.security.KeyChain
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +41,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -48,6 +56,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.ServerAddress
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.tls.CertificateInfo
 import io.github.zachelks.proxkeep.data.AuthMethod
@@ -157,12 +166,89 @@ private fun AddressStep(state: AddServerState) {
         keyboardActions = KeyboardActions(onGo = { state.submitAddress() }),
         modifier = Modifier.fillMaxWidth(),
     )
+    var showProxy by rememberSaveable { mutableStateOf(state.headers.isNotEmpty() || state.clientCertAlias != null) }
+    TextButton(onClick = { showProxy = !showProxy }) {
+        Text(stringResource(if (showProxy) R.string.proxy_hide else R.string.proxy_show))
+    }
+    if (showProxy) ReverseProxySettings(state)
     Button(
         onClick = state::submitAddress,
         enabled = !state.busy && state.host.isNotBlank(),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(stringResource(R.string.action_continue))
+    }
+}
+
+/** Extra headers and a client certificate, for a reverse proxy that needs them. */
+@Composable
+private fun ReverseProxySettings(state: AddServerState) {
+    Text(
+        text = stringResource(R.string.proxy_intro),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(stringResource(R.string.proxy_headers), style = MaterialTheme.typography.titleSmall)
+    state.headers.forEachIndexed { index, header ->
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = header.name,
+                    onValueChange = { state.setHeader(index, header.copy(name = it)) },
+                    label = { Text(stringResource(R.string.field_header_name)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = header.value,
+                    onValueChange = { state.setHeader(index, header.copy(value = it)) },
+                    label = { Text(stringResource(R.string.field_header_value)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(onClick = { state.removeHeader(index) }) {
+                    Text(stringResource(R.string.action_remove_header))
+                }
+            }
+        }
+    }
+    TextButton(onClick = state::addHeader) { Text(stringResource(R.string.action_add_header)) }
+
+    Text(stringResource(R.string.proxy_client_certificate), style = MaterialTheme.typography.titleSmall)
+    Text(
+        text = state.clientCertAlias ?: stringResource(R.string.proxy_no_certificate),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    val activity = LocalActivity.current
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (activity != null) {
+            TextButton(
+                onClick = {
+                    val address = ServerAddress.parse(state.host)
+                    val main = Handler(Looper.getMainLooper())
+                    // The system chooser also grants the app access to the key the person picks.
+                    KeyChain.choosePrivateKeyAlias(
+                        activity,
+                        { alias -> if (alias != null) main.post { state.clientCertAlias = alias } },
+                        null,
+                        null,
+                        address?.host,
+                        address?.port ?: -1,
+                        state.clientCertAlias,
+                    )
+                },
+            ) {
+                Text(stringResource(R.string.action_choose_certificate))
+            }
+        }
+        if (state.clientCertAlias != null) {
+            TextButton(onClick = { state.clientCertAlias = null }) {
+                Text(stringResource(R.string.action_remove_certificate))
+            }
+        }
     }
 }
 

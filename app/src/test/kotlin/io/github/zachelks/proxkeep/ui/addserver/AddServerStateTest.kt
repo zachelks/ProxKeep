@@ -5,6 +5,7 @@ import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.data.AuthMethod
+import io.github.zachelks.proxkeep.data.HttpHeader
 import io.github.zachelks.proxkeep.data.MemoryProfileStorage
 import io.github.zachelks.proxkeep.data.PinnedServer
 import io.github.zachelks.proxkeep.data.PlainSecrets
@@ -60,6 +61,59 @@ class AddServerStateTest {
         assertEquals(fixture.fingerprint, state.certificate?.sha256Fingerprint)
         assertFalse(state.certificateChanged)
         assertTrue(fixture.requestedPaths.isEmpty(), "nothing reaches a server that is not trusted")
+    }
+
+    @Test
+    fun reverseProxyHeadersAreSentFromTheFirstContactAndSaved(): Unit = runBlocking {
+        fixture.route("/version", """{"data":{"version":"9.2.1"}}""")
+        fixture.route("/access/domains", """{"data":$REALMS}""")
+        val state = newServer()
+        state.host = address
+        state.addHeader()
+        state.setHeader(0, HttpHeader(" X-Proxy-Token ", " abc "))
+        state.addHeader()
+        state.submitAddress()
+        state.awaitIdle()
+        state.trustCertificate()
+        state.awaitIdle()
+
+        state.method = AuthMethod.ApiToken
+        state.tokenId = "root@pam!app"
+        state.tokenSecret = "s3cret"
+        state.submitSignIn()
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        assertEquals("abc", fixture.server.takeRequest().getHeader("X-Proxy-Token"), "the realm list")
+        assertEquals("abc", fixture.server.takeRequest().getHeader("X-Proxy-Token"), "the token check")
+        assertEquals(listOf(HttpHeader("X-Proxy-Token", "abc")), repository.savedHeaders(storage.read().profiles.single()))
+        assertEquals(emptyList(), state.headers, "header values are not kept once saved")
+    }
+
+    @Test
+    fun anInvalidHeaderIsRefusedAtOnce() {
+        val state = newServer()
+        state.host = address
+        state.addHeader()
+        state.setHeader(0, HttpHeader("Bad Name", "x"))
+
+        state.submitAddress()
+
+        assertEquals(UiMessage(R.string.error_invalid_header), state.error)
+        assertFalse(state.busy)
+    }
+
+    @Test
+    fun aClientCertificateThatIsGoneIsReported(): Unit = runBlocking {
+        val state = newServer()
+        state.host = address
+        state.clientCertAlias = "removed"
+
+        state.submitAddress()
+        state.awaitIdle()
+
+        assertEquals(UiMessage(R.string.error_client_certificate_unavailable), state.error)
+        assertEquals(AddServerState.Step.Address, state.step)
     }
 
     @Test

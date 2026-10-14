@@ -10,6 +10,7 @@ import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.data.AppSettings
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.GuestActions
+import io.github.zachelks.proxkeep.data.KeyChainKeys
 import io.github.zachelks.proxkeep.data.ProfileStore
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SecretBox
@@ -60,6 +61,7 @@ class AppContainer(context: Context) {
         secrets = SecretBox(),
         http = http,
         scope = scope,
+        clientKeys = KeyChainKeys(context),
     )
 
     val refresh = RefreshSignal()

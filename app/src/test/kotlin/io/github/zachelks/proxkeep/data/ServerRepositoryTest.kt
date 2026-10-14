@@ -247,6 +247,60 @@ class ServerRepositoryTest {
         assertNull(StoredServers().active)
     }
 
+    @Test
+    fun proxyHeadersAreStoredEncryptedAndSentWithEveryRequest(): Unit = runBlocking {
+        val storage = MemoryProfileStorage()
+        val repository = startedRepository(storage)
+        val headers = listOf(HttpHeader("CF-Access-Client-Secret", "s3cret"))
+
+        repository.saveAndActivate(fixture.profile, ApiTokenCredentials(fixture.profile.principal, "secret"), headers)
+        fixture.enqueue("""{"data":{"version":"9.2.1"}}""")
+        repository.request { it.version() }
+
+        val saved = storage.read().profiles.single()
+        assertEquals("plain:" + """[{"name":"CF-Access-Client-Secret","value":"s3cret"}]""", saved.encryptedHeaders)
+        assertEquals(headers, repository.savedHeaders(saved))
+        assertEquals("s3cret", fixture.server.takeRequest().getHeader("CF-Access-Client-Secret"))
+    }
+
+    @Test
+    fun proxyHeadersAreRestoredOnStart(): Unit = runBlocking {
+        val stored = fixture.profile.copy(
+            encryptedSecret = "plain:secret",
+            encryptedHeaders = "plain:" + """[{"name":"X-Proxy-Token","value":"abc"}]""",
+        )
+        val repository = startedRepository(MemoryProfileStorage(StoredServers(listOf(stored), stored.id)))
+        fixture.enqueue("""{"data":{"version":"9.2.1"}}""")
+
+        repository.request { it.version() }
+
+        assertEquals("abc", fixture.server.takeRequest().getHeader("X-Proxy-Token"))
+    }
+
+    @Test
+    fun headersThatCannotBeDecryptedStartSignedOut(): Unit = runBlocking {
+        val stored = fixture.profile.copy(encryptedSecret = "plain:secret", encryptedHeaders = "from another device")
+        val picky = object : SecretCipher by PlainSecrets() {
+            override fun decrypt(encoded: String): String? = encoded.takeIf { it.startsWith("plain:") }?.removePrefix("plain:")
+        }
+        val repository = ServerRepository(MemoryProfileStorage(StoredServers(listOf(stored), stored.id)), picky, OkHttpClient(), scope)
+        repository.loaded.first { it }
+
+        assertEquals(Session.SignedOut(stored), repository.session.value)
+    }
+
+    @Test
+    fun theClientCertificateIsLookedUpByItsAlias(): Unit = runBlocking {
+        val asked = mutableListOf<String>()
+        val repository = ServerRepository(MemoryProfileStorage(), PlainSecrets(), OkHttpClient(), scope, ClientKeys { asked += it; null })
+        repository.loaded.first { it }
+
+        repository.saveAndActivate(fixture.profile.copy(clientCertAlias = "phone"), ApiTokenCredentials(fixture.profile.principal, "secret"))
+
+        assertEquals(listOf("phone"), asked)
+        assertEquals("phone", repository.servers.value.profiles.single().clientCertAlias)
+    }
+
     private suspend fun startedRepository(storage: ProfileStorage): ServerRepository {
         val repository = ServerRepository(storage, PlainSecrets(), OkHttpClient(), scope)
         repository.loaded.first { it }

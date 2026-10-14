@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep.data
 
+import io.github.zachelks.proxkeep.core.api.ConnectionOptions
 import io.github.zachelks.proxkeep.core.api.ProbeResult
 import io.github.zachelks.proxkeep.core.api.PveApiException
 import io.github.zachelks.proxkeep.core.api.PveClient
@@ -23,6 +24,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import java.io.IOException
 import java.security.GeneralSecurityException
@@ -53,6 +57,7 @@ class ServerRepository(
     private val secrets: SecretCipher,
     private val http: OkHttpClient,
     private val scope: CoroutineScope,
+    private val clientKeys: ClientKeys = ClientKeys.None,
 ) {
     private val mutex = Mutex()
     private var renewalJob: Job? = null
@@ -105,24 +110,63 @@ class ServerRepository(
         }
     }
 
-    /** Builds a client that applies [pinnedSha256] and carries no credentials. */
-    suspend fun newClient(address: ServerAddress, pinnedSha256: String?): PveClient =
+    /** Builds a client that applies [pinnedSha256] and [options] and carries no credentials. */
+    suspend fun newClient(
+        address: ServerAddress,
+        pinnedSha256: String?,
+        options: ConnectionOptions = ConnectionOptions(),
+    ): PveClient = withContext(Dispatchers.IO) {
+        val trust = ServerTrust(pinnedSha256, clientKey = options.clientKey)
+        PveClient(address.apiBaseUrl, options.applyTo(trust.applyTo(http)))
+    }
+
+    suspend fun probe(
+        address: ServerAddress,
+        pinnedSha256: String?,
+        options: ConnectionOptions = ConnectionOptions(),
+    ): ProbeResult = withContext(Dispatchers.IO) {
+        probeServer(address.apiBaseUrl, http, pinnedSha256, options)
+    }
+
+    /**
+     * The connection settings for [headers] and the client certificate under
+     * [clientCertAlias]. Reading the certificate can take a moment.
+     *
+     * @throws IllegalArgumentException when a header is not valid HTTP
+     */
+    suspend fun connectionOptions(headers: List<HttpHeader>, clientCertAlias: String?): ConnectionOptions =
         withContext(Dispatchers.IO) {
-            PveClient(address.apiBaseUrl, ServerTrust(pinnedSha256).applyTo(http))
+            ConnectionOptions(headers.map { it.name to it.value }, clientCertAlias?.let(clientKeys::keyManager))
         }
 
-    suspend fun probe(address: ServerAddress, pinnedSha256: String?): ProbeResult =
-        withContext(Dispatchers.IO) {
-            probeServer(address.apiBaseUrl, http, pinnedSha256)
+    /**
+     * The reverse proxy headers saved with [profile], or null if they cannot
+     * be decrypted on this device. Uses the Android Keystore, so it blocks
+     * briefly.
+     */
+    fun savedHeaders(profile: ServerProfile): List<HttpHeader>? {
+        val encrypted = profile.encryptedHeaders ?: return emptyList()
+        val text = secrets.decrypt(encrypted) ?: return null
+        return try {
+            headerJson.decodeFromString(HEADER_LIST, text)
+        } catch (e: SerializationException) {
+            null
         }
+    }
 
-    /** Saves [profile], replacing one with the same ID, and starts a session with [credentials]. */
+    /**
+     * Saves [profile], replacing one with the same ID, and starts a session
+     * with [credentials]. [headers] are stored encrypted with the profile.
+     */
     @Throws(IOException::class)
-    suspend fun saveAndActivate(profile: ServerProfile, credentials: Credentials) {
+    suspend fun saveAndActivate(profile: ServerProfile, credentials: Credentials, headers: List<HttpHeader> = emptyList()) {
         mutex.withLock {
+            val withHeaders = profile.copy(
+                encryptedHeaders = if (headers.isEmpty()) null else encrypt(headerJson.encodeToString(HEADER_LIST, headers)),
+            )
             val toStore = when (credentials) {
-                is ApiTokenCredentials -> profile.copy(encryptedSecret = encrypt(credentials.secret))
-                is TicketCredentials -> profile.copy(encryptedSecret = null)
+                is ApiTokenCredentials -> withHeaders.copy(encryptedSecret = encrypt(credentials.secret))
+                is TicketCredentials -> withHeaders.copy(encryptedSecret = null)
             }
             val current = _servers.value.profiles
             val profiles = if (current.any { it.id == toStore.id }) {
@@ -130,8 +174,9 @@ class ServerRepository(
             } else {
                 current + toStore
             }
+            val options = connectionOptions(headers, toStore.clientCertAlias)
             persist(StoredServers(profiles, toStore.id))
-            val client = newClient(toStore.address, toStore.pinnedSha256).withCredentials(credentials)
+            val client = newClient(toStore.address, toStore.pinnedSha256, options).withCredentials(credentials)
             setSession(Session.Active(toStore, client))
         }
     }
@@ -197,9 +242,16 @@ class ServerRepository(
         val encrypted = profile.encryptedSecret
         if (profile.authMethod == AuthMethod.ApiToken && encrypted != null) {
             val secret = withContext(Dispatchers.IO) { secrets.decrypt(encrypted) }
-            if (secret != null) {
+            // Headers that cannot be decrypted are needed to reach the server; signing in again restores them.
+            val headers = withContext(Dispatchers.IO) { savedHeaders(profile) }
+            if (secret != null && headers != null) {
                 val credentials = ApiTokenCredentials(profile.principal, secret)
-                return Session.Active(profile, newClient(profile.address, profile.pinnedSha256).withCredentials(credentials))
+                val options = try {
+                    connectionOptions(headers, profile.clientCertAlias)
+                } catch (e: IllegalArgumentException) {
+                    return Session.SignedOut(profile)
+                }
+                return Session.Active(profile, newClient(profile.address, profile.pinnedSha256, options).withCredentials(credentials))
             }
         }
         return Session.SignedOut(profile)
@@ -246,5 +298,7 @@ class ServerRepository(
 
     private companion object {
         const val RENEW_INTERVAL_MS = 30L * 60L * 1000L
+        val HEADER_LIST = ListSerializer(HttpHeader.serializer())
+        val headerJson = Json { ignoreUnknownKeys = true }
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.ConnectionOptions
 import io.github.zachelks.proxkeep.core.api.ProbeResult
 import io.github.zachelks.proxkeep.core.api.ServerAddress
 import io.github.zachelks.proxkeep.core.api.auth.ApiTokenCredentials
@@ -15,6 +16,7 @@ import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.model.Realm
 import io.github.zachelks.proxkeep.core.api.tls.CertificateInfo
 import io.github.zachelks.proxkeep.data.AuthMethod
+import io.github.zachelks.proxkeep.data.HttpHeader
 import io.github.zachelks.proxkeep.data.ServerProfile
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.ui.UiMessage
@@ -33,11 +35,13 @@ import java.util.UUID
  * open and are cleared when it finishes or is cancelled.
  *
  * @param existing the saved server being signed in to, or null to add a new one
+ * @param existingHeaders the reverse proxy headers saved with [existing]
  */
 class AddServerState(
     private val repository: ServerRepository,
     private val scope: CoroutineScope,
     private val existing: ServerProfile?,
+    existingHeaders: List<HttpHeader> = emptyList(),
 ) {
     enum class Step { Address, Certificate, SignIn, SecondFactor, Done }
 
@@ -53,6 +57,11 @@ class AddServerState(
     // Address step
     var host by mutableStateOf(existing?.address?.display.orEmpty())
     var name by mutableStateOf(existing?.name.orEmpty())
+
+    // Reverse proxy settings, on the address step
+    var headers by mutableStateOf(existingHeaders)
+        private set
+    var clientCertAlias by mutableStateOf(existing?.clientCertAlias)
 
     // Certificate step
     var certificate by mutableStateOf<CertificateInfo?>(null)
@@ -79,6 +88,8 @@ class AddServerState(
     var code by mutableStateOf("")
 
     private var address: ServerAddress? = null
+    private var options = ConnectionOptions()
+    private var acceptedHeaders: List<HttpHeader> = emptyList()
     private var pin: String? = existing?.pinnedSha256
     private var challenge: TfaChallenge? = null
     private var challengeUser: String? = null
@@ -87,6 +98,18 @@ class AddServerState(
     private fun passwordPrincipal(): String? =
         existing?.takeIf { it.authMethod == AuthMethod.Password }?.principal
 
+    fun addHeader() {
+        headers = headers + HttpHeader("", "")
+    }
+
+    fun setHeader(index: Int, header: HttpHeader) {
+        headers = headers.toMutableList().also { it[index] = header }
+    }
+
+    fun removeHeader(index: Int) {
+        headers = headers.toMutableList().also { it.removeAt(index) }
+    }
+
     /** Contacts the server at [host] and moves on to the certificate or sign-in step. */
     fun submitAddress() {
         val parsed = ServerAddress.parse(host)
@@ -94,10 +117,25 @@ class AddServerState(
             error = UiMessage(R.string.error_invalid_address)
             return
         }
+        val wanted = headers
+            .map { HttpHeader(it.name.trim(), it.value.trim()) }
+            .filterNot { it.name.isEmpty() && it.value.isEmpty() }
+        if (wanted.any { !ConnectionOptions.isValidName(it.name) || !ConnectionOptions.isValidValue(it.value) }) {
+            error = UiMessage(R.string.error_invalid_header)
+            return
+        }
+        val alias = clientCertAlias
         // A pinned fingerprint belongs to one address and is not carried to another.
         val knownPin = existing?.takeIf { it.address == parsed }?.pinnedSha256
         launch {
-            when (val result = repository.probe(parsed, knownPin)) {
+            val connection = repository.connectionOptions(wanted, alias)
+            if (alias != null && connection.clientKey == null) {
+                error = UiMessage(R.string.error_client_certificate_unavailable)
+                return@launch
+            }
+            options = connection
+            acceptedHeaders = wanted
+            when (val result = repository.probe(parsed, knownPin, connection)) {
                 is ProbeResult.Reachable -> {
                     pin = knownPin
                     showSignIn(parsed, result.realms)
@@ -120,7 +158,7 @@ class AddServerState(
         val target = address ?: return
         val shown = certificate ?: return
         launch {
-            when (val result = repository.probe(target, shown.sha256Fingerprint)) {
+            when (val result = repository.probe(target, shown.sha256Fingerprint, options)) {
                 is ProbeResult.Reachable -> {
                     pin = shown.sha256Fingerprint
                     showSignIn(target, result.realms)
@@ -158,7 +196,7 @@ class AddServerState(
                     return
                 }
                 launch {
-                    val client = repository.newClient(target, pin)
+                    val client = repository.newClient(target, pin, options)
                     when (val result = client.login(user, realm, secret)) {
                         is LoginResult.Success -> finish(target, result.credentials, result.clusterName)
                         is LoginResult.SecondFactorRequired -> showSecondFactor(result)
@@ -175,7 +213,7 @@ class AddServerState(
                 launch {
                     val credentials = ApiTokenCredentials(id, secret)
                     // Any authenticated call proves the token works; this one needs no privileges.
-                    repository.newClient(target, pin).withCredentials(credentials).version()
+                    repository.newClient(target, pin, options).withCredentials(credentials).version()
                     finish(target, credentials, clusterName = null)
                 }
             }
@@ -208,7 +246,7 @@ class AddServerState(
             return
         }
         launch {
-            val result = repository.newClient(target, pin).completeSecondFactor(user, pending, factorKind, entered)
+            val result = repository.newClient(target, pin, options).completeSecondFactor(user, pending, factorKind, entered)
             finish(target, result.credentials, result.clusterName)
         }
     }
@@ -226,8 +264,9 @@ class AddServerState(
             pinnedSha256 = pin,
             authMethod = method,
             principal = principal,
+            clientCertAlias = clientCertAlias,
         )
-        repository.saveAndActivate(profile, credentials)
+        repository.saveAndActivate(profile, credentials, acceptedHeaders)
         clearSecrets()
         step = Step.Done
     }
@@ -261,6 +300,9 @@ class AddServerState(
     }
 
     private fun clearSecrets() {
+        headers = emptyList()
+        acceptedHeaders = emptyList()
+        options = ConnectionOptions()
         password = ""
         tokenSecret = ""
         code = ""
