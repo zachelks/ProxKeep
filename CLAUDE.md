@@ -32,7 +32,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 
 - Plain JVM for code without Android types: repositories, view models, `AddServerState`, `Navigator`, `AppLock`. View model tests use `MainDispatcherRule`, which moves the main dispatcher to background threads. Cancel `viewModelScope` in teardown. Don't use the rule in Compose tests: Compose needs the real main thread, which Robolectric provides.
 - Robolectric (`@RunWith(RobolectricTestRunner::class)`) for code that needs the Android framework or the app's resources: `ProfileStore`, `AppSettings`, the console classes, and anything that takes a `Context`.
-- Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`.
+- Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`. Under the v2 rule, view model flows that wait on network replies can stall; collect them from a background scope in the test, as `LifecycleDialogsTest` does.
 
 `PinnedServer` (`data/TestServers.kt`) is a `MockWebServer` with a pinned self-signed certificate. `enqueue` answers requests in order. `route` answers by path, which suits loaders that poll several endpoints at once. Over HTTPS it speaks HTTP/2, which has no reason phrase, so put an error's text in the body's `message` field, as Proxmox does.
 
@@ -62,7 +62,8 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - `RefreshSignal.ticks()` paces every loader: at once, every 10 s, and whenever `request()` is called (the refresh button, a finished power action).
 - `ClusterRepository` holds the one `/cluster/resources` call that feeds Overview, Guests, Infrastructure and search.
 - `ServerAccessRepository` holds the server version and the credentials' permissions (`/access/permissions`). Use `ServerAccess.allows(paths, privilege)` to decide whether to offer an action; it allows everything while permissions are unknown, because the server enforces them anyway. `Permissions.guestPaths` includes the guest's pool.
-- `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`.
+- `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`. `GuestLifecycle` does the same for snapshots, backups, restores, migrations, clones, templates and deletions, following each task on the node named in its UPID.
+- `LifecycleViewModel` serves one guest's Snapshots and Backups screens and its lifecycle dialogs. `availableLifecycleItems` decides what the guest's menu offers.
 
 **Navigation.** Navigation 3 (`ui/AppNavigation.kt`). The back stack is a list of `Route`s, saved across rotation and process death, and changed only through `Navigator`.
 - `Route.Main` is always at the bottom. `MainScreen` holds the four top-level destinations (`TopLevelDestination`) as tabs in a `NavigationSuiteScaffold`. Back from another tab returns to Overview.
@@ -114,4 +115,6 @@ VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 3, Remote desktop.** Done in code: the VNC client, touch and trackpad pointer modes, zoom, the extra-keys bar, hardware keyboard and mouse, clipboard both ways, immersive mode and picture-in-picture. Not yet confirmed against real Windows and Linux guests. Not done: external displays, pointer capture for a mouse, and QEMU's extended key events for keyboard layouts other than the server's.
 
-**Milestones 4 to 9.** Not started.
+**Milestone 4, Guest lifecycle.** Done in code: snapshots, backup now, restore, migrate, clone, convert to template and delete. Restoring as a new guest and backup jobs come with milestone 6. The first public release follows this milestone; it needs testing against real servers first.
+
+**Milestones 5 to 9.** Not started.
