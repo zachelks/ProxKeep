@@ -76,7 +76,9 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 **Consoles.**
 - `PveClient.openConsole` asks the server for a terminal proxy, then connects through its websocket relay.
 - `ConsoleChannel` implements the pve-xtermjs framing: a ticket handshake, then `OK`, data and resize frames, and a 30 s keep-alive. The console websocket has no read timeout, because idle shells are quiet.
-- `ConsoleManager` holds one `ConsoleSession` at the app level, so it survives rotation and the lock. Switching servers or signing out closes it.
+- `ConsoleManager` holds the open `ConsoleSession`s and the one on screen, at the app level, so they survive rotation, the lock and leaving the terminal. Switching servers or signing out closes them all.
+- `ConsoleService` is a foreground service (special-use type) that runs exactly while a console is open, so consoles stay connected in the background. `AppContainer` starts it with the first console; it stops itself after the last. Its notification opens the terminal through `PendingNavigation`.
+- The extra-keys row (`console/TerminalKey.kt`), text size, font and color scheme (`console/TerminalAppearance.kt`) are settings in `AppSettings`. Termux keeps one color scheme for all terminals; `ConsoleManager.refreshColors` repaints open ones.
 
 ## Conventions
 
@@ -102,12 +104,6 @@ Not yet confirmed against a real server:
 
 Of the three prototypes the spec puts first, VNC over the websocket is not started.
 
-**Milestone 2, Terminal.** In progress. Done: the websocket session layer, the extra-keys row with sticky modifiers, hardware keyboard, pinch zoom, selection, copy and paste.
-
-Still missing from milestone 2:
-- several sessions at once
-- a foreground service to keep consoles alive in the background
-- a customizable extra-keys row with key repeat
-- font and color scheme settings
+**Milestone 2, Terminal.** Done in code: the websocket session layer, several consoles at once, a foreground service that keeps them connected, a customizable extra-keys row with key repeat and function keys, hardware keyboard, pinch zoom, font and color scheme settings, selection, copy and paste. A long editing session against a real server still needs checking by hand.
 
 **Milestones 3 to 9.** Not started.
