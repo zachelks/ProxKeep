@@ -403,4 +403,18 @@
     <string name="action_move_key_up">Move %1$s left</string>
     <string name="action_move_key_down">Move %1$s right</string>
     <string name="action_remove_key">Remove %1$s</string>
+    <string name="settings_text_size">Text size</string>
+    <string name="settings_text_size_value">%1$d sp. Pinching the terminal changes it too.</string>
+    <string name="settings_font">Font</string>
+    <string name="font_system">System monospace</string>
+    <string name="font_jetbrains_mono">JetBrains Mono</string>
+    <string name="settings_colors">Colors</string>
+    <string name="palette_default">Default</string>
+    <string name="palette_solarized_dark">Solarized Dark</string>
+    <string name="palette_solarized_light">Solarized Light</string>
+    <string name="palette_dracula">Dracula</string>
+    <string name="palette_gruvbox_dark">Gruvbox Dark</string>
+    <string name="palette_tango_light">Tango Light</string>
+    <string name="about_font">JetBrains Mono font</string>
+    <string name="about_font_license">Bundled under the SIL Open Font License 1.1</string>
 </resources>

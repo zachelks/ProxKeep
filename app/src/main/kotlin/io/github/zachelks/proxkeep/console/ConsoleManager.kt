@@ -80,6 +80,14 @@ class ConsoleManager(
         if (_current.value === session) _current.value = after.getOrNull(index) ?: after.lastOrNull()
     }
 
+    /** Repaints every open console in the current [TerminalPalette], dropping colors programs set themselves. */
+    fun refreshColors() {
+        _sessions.value.forEach { session ->
+            session.terminal.emulator?.mColors?.reset()
+            session.view?.invalidate()
+        }
+    }
+
     fun closeAll() {
         _sessions.value.forEach { it.end() }
         _sessions.value = emptyList()

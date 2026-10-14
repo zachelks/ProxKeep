@@ -2,7 +2,9 @@ package io.github.zachelks.proxkeep.data
 
 import android.content.Context
 import androidx.core.content.edit
+import io.github.zachelks.proxkeep.console.TerminalFont
 import io.github.zachelks.proxkeep.console.TerminalKey
+import io.github.zachelks.proxkeep.console.TerminalPalette
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +26,11 @@ enum class LockTimeout(val seconds: Int) {
         fun fromSeconds(seconds: Int): LockTimeout = entries.firstOrNull { it.seconds == seconds } ?: Default
     }
 }
+
+/** The text sizes the terminal can take, in sp. */
+val TERMINAL_TEXT_SIZES_SP = 7..36
+
+const val DEFAULT_TEXT_SIZE_SP = 14
 
 /** The app's own preferences, kept in app-private storage. */
 class AppSettings(context: Context) {
@@ -50,6 +57,40 @@ class AppSettings(context: Context) {
         _extraKeys.value = distinct
     }
 
+    private val _terminalTextSize = MutableStateFlow(
+        preferences.getInt(KEY_TEXT_SIZE, DEFAULT_TEXT_SIZE_SP).coerceIn(TERMINAL_TEXT_SIZES_SP),
+    )
+
+    /** The terminal's text size in sp. Pinching the terminal changes it too. */
+    val terminalTextSize: StateFlow<Int> = _terminalTextSize.asStateFlow()
+
+    fun setTerminalTextSize(sizeSp: Int) {
+        val size = sizeSp.coerceIn(TERMINAL_TEXT_SIZES_SP)
+        if (size == _terminalTextSize.value) return
+        preferences.edit { putInt(KEY_TEXT_SIZE, size) }
+        _terminalTextSize.value = size
+    }
+
+    private val _terminalFont = MutableStateFlow(
+        TerminalFont.entries.firstOrNull { it.name == preferences.getString(KEY_FONT, null) } ?: TerminalFont.System,
+    )
+    val terminalFont: StateFlow<TerminalFont> = _terminalFont.asStateFlow()
+
+    fun setTerminalFont(font: TerminalFont) {
+        preferences.edit { putString(KEY_FONT, font.name) }
+        _terminalFont.value = font
+    }
+
+    private val _terminalPalette = MutableStateFlow(
+        TerminalPalette.entries.firstOrNull { it.name == preferences.getString(KEY_PALETTE, null) } ?: TerminalPalette.Default,
+    )
+    val terminalPalette: StateFlow<TerminalPalette> = _terminalPalette.asStateFlow()
+
+    fun setTerminalPalette(palette: TerminalPalette) {
+        preferences.edit { putString(KEY_PALETTE, palette.name) }
+        _terminalPalette.value = palette
+    }
+
     fun setLockEnabled(enabled: Boolean) {
         preferences.edit { putBoolean(KEY_LOCK_ENABLED, enabled) }
         _lockEnabled.value = enabled
@@ -64,5 +105,8 @@ class AppSettings(context: Context) {
         const val KEY_LOCK_ENABLED = "app_lock_enabled"
         const val KEY_LOCK_TIMEOUT = "app_lock_timeout_seconds"
         const val KEY_EXTRA_KEYS = "terminal_extra_keys"
+        const val KEY_TEXT_SIZE = "terminal_text_size_sp"
+        const val KEY_FONT = "terminal_font"
+        const val KEY_PALETTE = "terminal_palette"
     }
 }

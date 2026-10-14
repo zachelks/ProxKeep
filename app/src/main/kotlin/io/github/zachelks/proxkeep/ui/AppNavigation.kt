@@ -68,6 +68,8 @@ private fun TerminalEntry(navigator: Navigator) {
     val consoles = container.consoles
     val sessions by consoles.sessions.collectAsStateWithLifecycle()
     val extraKeys by container.settings.extraKeys.collectAsStateWithLifecycle()
+    val textSize by container.settings.terminalTextSize.collectAsStateWithLifecycle()
+    val font by container.settings.terminalFont.collectAsStateWithLifecycle()
     val console by consoles.current.collectAsStateWithLifecycle()
     val open = console
     if (open == null) {
@@ -83,5 +85,8 @@ private fun TerminalEntry(navigator: Navigator) {
         onReconnect = consoles::reconnect,
         onLeave = { navigator.close(Route.Terminal) },
         extraKeys = extraKeys,
+        textSizeSp = textSize,
+        font = font,
+        onTextSizeChange = container.settings::setTerminalTextSize,
     )
 }

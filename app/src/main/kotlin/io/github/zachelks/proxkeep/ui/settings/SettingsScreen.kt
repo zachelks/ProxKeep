@@ -3,6 +3,26 @@
 package io.github.zachelks.proxkeep.ui.settings
 
 import android.content.pm.PackageManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Slider
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.core.graphics.toColorInt
+import io.github.zachelks.proxkeep.console.TerminalFont
+import io.github.zachelks.proxkeep.console.TerminalPalette
+import io.github.zachelks.proxkeep.data.TERMINAL_TEXT_SIZES_SP
+import kotlin.math.roundToInt
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -158,7 +178,43 @@ private fun AppLockSettings() {
 
 @Composable
 private fun TerminalSettings(onOpenExtraKeys: () -> Unit) {
-    val row by appContainer().settings.extraKeys.collectAsStateWithLifecycle()
+    val settings = appContainer().settings
+    val row by settings.extraKeys.collectAsStateWithLifecycle()
+    val textSize by settings.terminalTextSize.collectAsStateWithLifecycle()
+    val font by settings.terminalFont.collectAsStateWithLifecycle()
+    val palette by settings.terminalPalette.collectAsStateWithLifecycle()
+
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_text_size)) },
+        supportingContent = {
+            Column {
+                Text(stringResource(R.string.settings_text_size_value, textSize))
+                Slider(
+                    value = textSize.toFloat(),
+                    onValueChange = { settings.setTerminalTextSize(it.roundToInt()) },
+                    valueRange = TERMINAL_TEXT_SIZES_SP.first.toFloat()..TERMINAL_TEXT_SIZES_SP.last.toFloat(),
+                )
+            }
+        },
+    )
+
+    Label(stringResource(R.string.settings_font))
+    RadioGroup(
+        options = TerminalFont.entries,
+        selected = font,
+        onSelect = settings::setTerminalFont,
+        label = { stringResource(it.label()) },
+    )
+
+    Label(stringResource(R.string.settings_colors))
+    RadioGroup(
+        options = TerminalPalette.entries,
+        selected = palette,
+        onSelect = settings::setTerminalPalette,
+        label = { stringResource(it.label()) },
+        trailing = { PalettePreview(it) },
+    )
+
     ListItem(
         headlineContent = { Text(stringResource(R.string.settings_extra_keys)) },
         supportingContent = {
@@ -173,6 +229,75 @@ private fun TerminalSettings(onOpenExtraKeys: () -> Unit) {
         },
         modifier = Modifier.clickable(onClick = onOpenExtraKeys),
     )
+}
+
+@Composable
+private fun Label(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+    )
+}
+
+@Composable
+private fun <T> RadioGroup(
+    options: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    label: @Composable (T) -> String,
+    trailing: @Composable (T) -> Unit = {},
+) {
+    Column(modifier = Modifier.selectableGroup()) {
+        options.forEach { option ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = option == selected, onClick = { onSelect(option) }, role = Role.RadioButton)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = option == selected, onClick = null)
+                Spacer(Modifier.width(16.dp))
+                Text(text = label(option), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                trailing(option)
+            }
+        }
+    }
+}
+
+/** A sample of a palette: its text and a few ANSI colors on its background. */
+@Composable
+private fun PalettePreview(palette: TerminalPalette) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+            .background(Color(palette.background.toColorInt()))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("ls", color = Color(palette.foreground.toColorInt()), fontFamily = FontFamily.Monospace)
+        listOf(1, 2, 3, 4).forEach { index ->
+            Box(Modifier.size(10.dp).clip(CircleShape).background(Color(palette.ansi[index].toColorInt())))
+        }
+    }
+}
+
+private fun TerminalFont.label(): Int = when (this) {
+    TerminalFont.System -> R.string.font_system
+    TerminalFont.JetBrainsMono -> R.string.font_jetbrains_mono
+}
+
+private fun TerminalPalette.label(): Int = when (this) {
+    TerminalPalette.Default -> R.string.palette_default
+    TerminalPalette.SolarizedDark -> R.string.palette_solarized_dark
+    TerminalPalette.SolarizedLight -> R.string.palette_solarized_light
+    TerminalPalette.Dracula -> R.string.palette_dracula
+    TerminalPalette.GruvboxDark -> R.string.palette_gruvbox_dark
+    TerminalPalette.TangoLight -> R.string.palette_tango_light
 }
 
 private fun LockTimeout.label(): Int = when (this) {
@@ -204,6 +329,31 @@ private fun About() {
         supportingContent = { Text(stringResource(R.string.about_license_summary)) },
         modifier = Modifier.clickable { uriHandler.openUri(SOURCE_URL) },
     )
+    var showingFontLicense by remember { mutableStateOf(false) }
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.about_font)) },
+        supportingContent = { Text(stringResource(R.string.about_font_license)) },
+        modifier = Modifier.clickable { showingFontLicense = true },
+    )
+    if (showingFontLicense) {
+        val text = remember {
+            context.assets.open("licenses/JetBrainsMono-OFL.txt").bufferedReader().use { it.readText() }
+        }
+        AlertDialog(
+            onDismissRequest = { showingFontLicense = false },
+            title = { Text(stringResource(R.string.about_font)) },
+            text = {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showingFontLicense = false }) { Text(stringResource(R.string.action_close)) }
+            },
+        )
+    }
     Text(
         text = stringResource(R.string.about_trademark),
         style = MaterialTheme.typography.bodySmall,

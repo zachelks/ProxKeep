@@ -4,7 +4,6 @@ package io.github.zachelks.proxkeep.ui.console
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
@@ -72,17 +71,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.terminal.KeyHandler
 import com.termux.view.TerminalView
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.data.DEFAULT_TEXT_SIZE_SP
+import io.github.zachelks.proxkeep.data.TERMINAL_TEXT_SIZES_SP
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import io.github.zachelks.proxkeep.console.ConsoleSession
 import io.github.zachelks.proxkeep.console.ConsoleState
 import io.github.zachelks.proxkeep.console.KeyAction
+import io.github.zachelks.proxkeep.console.TerminalFont
 import io.github.zachelks.proxkeep.console.TerminalKey
-
-private val DefaultTextSize = 14.sp
-private val SmallestTextSize = 7.sp
-private val LargestTextSize = 36.sp
 
 /**
  * A full-screen terminal: the console on screen, a row of the keys an
@@ -99,6 +97,9 @@ fun TerminalScreen(
     onReconnect: (ConsoleSession) -> Unit,
     onLeave: () -> Unit,
     extraKeys: List<TerminalKey> = TerminalKey.DEFAULT_ROW,
+    textSizeSp: Int = DEFAULT_TEXT_SIZE_SP,
+    font: TerminalFont = TerminalFont.System,
+    onTextSizeChange: (Int) -> Unit = {},
 ) {
     val state by console.state.collectAsStateWithLifecycle()
     var confirmingEnd by remember { mutableStateOf(false) }
@@ -121,15 +122,18 @@ fun TerminalScreen(
 
     val density = LocalDensity.current
     val modifiers = remember { ModifierKeys() }
+    val textSizeChanged by rememberUpdatedState(onTextSizeChange)
     val viewClient = remember {
-        with(density) {
-            ConsoleViewClient(
-                modifiers = modifiers,
-                textSize = DefaultTextSize.roundToPx(),
-                textSizeRange = SmallestTextSize.roundToPx()..LargestTextSize.roundToPx(),
-            )
-        }
+        ConsoleViewClient(
+            modifiers = modifiers,
+            textSizeSp = textSizeSp,
+            textSizeRange = TERMINAL_TEXT_SIZES_SP,
+            toPixels = { sp -> with(density) { sp.sp.roundToPx() } },
+            onTextSizeChanged = { textSizeChanged(it) },
+        )
     }
+    LaunchedEffect(textSizeSp) { viewClient.applyTextSize(textSizeSp) }
+    val typeface = remember(font) { font.typeface(context) }
 
     DisposableEffect(console) {
         onDispose {
@@ -225,11 +229,19 @@ fun TerminalScreen(
             key(console.id) {
                 AndroidView(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    update = { view ->
+                        // The view's tag holds the typeface it was given last.
+                        if (view.tag !== typeface) {
+                            view.setTypeface(typeface)
+                            view.tag = typeface
+                        }
+                    },
                     factory = { context ->
                         TerminalView(context, null).apply {
                             setTerminalViewClient(viewClient)
-                            setTextSize(viewClient.textSize)
-                            setTypeface(Typeface.MONOSPACE)
+                            setTextSize(viewClient.textSizePixels)
+                            setTypeface(typeface)
+                            tag = typeface
                             isFocusable = true
                             isFocusableInTouchMode = true
                             viewClient.view = this

@@ -3,7 +3,9 @@ package io.github.zachelks.proxkeep.data
 import android.content.Context
 import androidx.core.content.edit
 import androidx.test.core.app.ApplicationProvider
+import io.github.zachelks.proxkeep.console.TerminalFont
 import io.github.zachelks.proxkeep.console.TerminalKey
+import io.github.zachelks.proxkeep.console.TerminalPalette
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.BeforeTest
@@ -67,6 +69,33 @@ class AppSettingsTest {
         AppSettings(context).setExtraKeys(emptyList())
 
         assertEquals(emptyList(), AppSettings(context).extraKeys.value)
+    }
+
+    @Test
+    fun terminalAppearanceIsSaved() {
+        val settings = AppSettings(context)
+        assertEquals(DEFAULT_TEXT_SIZE_SP, settings.terminalTextSize.value)
+        assertEquals(TerminalFont.System, settings.terminalFont.value)
+        assertEquals(TerminalPalette.Default, settings.terminalPalette.value)
+
+        settings.setTerminalTextSize(18)
+        settings.setTerminalFont(TerminalFont.JetBrainsMono)
+        settings.setTerminalPalette(TerminalPalette.Dracula)
+
+        val reopened = AppSettings(context)
+        assertEquals(18, reopened.terminalTextSize.value)
+        assertEquals(TerminalFont.JetBrainsMono, reopened.terminalFont.value)
+        assertEquals(TerminalPalette.Dracula, reopened.terminalPalette.value)
+    }
+
+    @Test
+    fun theTextSizeStaysInRange() {
+        val settings = AppSettings(context)
+
+        settings.setTerminalTextSize(200)
+        assertEquals(TERMINAL_TEXT_SIZES_SP.last, settings.terminalTextSize.value)
+        settings.setTerminalTextSize(1)
+        assertEquals(TERMINAL_TEXT_SIZES_SP.first, settings.terminalTextSize.value)
     }
 
     @Test

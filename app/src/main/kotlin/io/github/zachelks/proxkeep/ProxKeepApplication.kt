@@ -93,6 +93,12 @@ class AppContainer(context: Context) {
     val authenticator = Authenticator(appLock)
 
     init {
+        scope.launch {
+            settings.terminalPalette.collect { palette ->
+                palette.applyToTerminals()
+                consoles.refreshColors()
+            }
+        }
         // Open consoles keep the process alive in the background. The service stops itself after the last one.
         scope.launch {
             consoles.sessions

@@ -29,30 +29,43 @@ class ModifierKeys {
  * Answers the terminal view's questions about how it should behave and
  * reacts to its gestures.
  *
- * @param textSize the starting text size in pixels
- * @param textSizeRange the smallest and largest text size pinching may reach
+ * @param textSizeSp the starting text size, in sp
+ * @param textSizeRange the smallest and largest text size pinching may reach, in sp
+ * @param toPixels converts a size in sp to the pixels the view takes
+ * @param onTextSizeChanged called with the new size in sp after a pinch
  */
 class ConsoleViewClient(
     private val modifiers: ModifierKeys,
-    textSize: Int,
+    textSizeSp: Int,
     private val textSizeRange: IntRange,
+    private val toPixels: (Int) -> Int,
+    private val onTextSizeChanged: (Int) -> Unit = {},
 ) : TerminalViewClient {
 
     /** Set once the view exists. */
     var view: TerminalView? = null
 
-    var textSize: Int = textSize.coerceIn(textSizeRange)
+    var textSizeSp: Int = textSizeSp.coerceIn(textSizeRange)
         private set
+
+    /** The text size in pixels, for the view. */
+    val textSizePixels: Int
+        get() = toPixels(textSizeSp)
+
+    /** Sets the size from outside, such as Settings, without reporting it back. */
+    fun applyTextSize(sizeSp: Int) {
+        val next = sizeSp.coerceIn(textSizeRange)
+        if (next == textSizeSp) return
+        textSizeSp = next
+        view?.setTextSize(textSizePixels)
+    }
 
     /** Pinching changes the text size one step at a time. */
     override fun onScale(scale: Float): Float {
         if (scale < SCALE_SHRINK || scale > SCALE_GROW) {
-            val step = if (scale > 1f) TEXT_SIZE_STEP else -TEXT_SIZE_STEP
-            val next = (textSize + step).coerceIn(textSizeRange)
-            if (next != textSize) {
-                textSize = next
-                view?.setTextSize(next)
-            }
+            val before = textSizeSp
+            applyTextSize(textSizeSp + if (scale > 1f) TEXT_SIZE_STEP else -TEXT_SIZE_STEP)
+            if (textSizeSp != before) onTextSizeChanged(textSizeSp)
             return 1f
         }
         return scale
@@ -116,6 +129,6 @@ class ConsoleViewClient(
     private companion object {
         const val SCALE_SHRINK = 0.9f
         const val SCALE_GROW = 1.1f
-        const val TEXT_SIZE_STEP = 2
+        const val TEXT_SIZE_STEP = 1
     }
 }
