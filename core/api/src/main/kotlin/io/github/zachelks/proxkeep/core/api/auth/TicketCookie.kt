@@ -11,18 +11,19 @@ object TicketCookie {
     private const val HOST_PREFIX = "__Host-"
 
     /** Whether a cookie called [name] holds the ticket that [cookieName] names. */
-    fun matches(name: String, cookieName: String): Boolean = name == cookieName || name == HOST_PREFIX + cookieName
+    private fun matches(name: String, cookieName: String): Boolean = name == cookieName || name == HOST_PREFIX + cookieName
 
     /**
      * The ticket in a `Cookie` header value, such as `lang=en; PVEAuthCookie=…`,
-     * or null when there is none.
+     * or null when there is none. Both spellings can be present at once, one
+     * of them stale, so the first value that [usable] accepts is taken.
      */
-    fun fromCookieHeader(header: String?, cookieName: String): String? =
-        header?.split(';')?.firstNotNullOfOrNull { valueOf(it, cookieName) }
+    fun fromCookieHeader(header: String?, cookieName: String, usable: (String) -> Boolean = { true }): String? =
+        header?.split(';')?.firstNotNullOfOrNull { pair -> valueOf(pair, cookieName)?.takeIf(usable) }
 
     /** The ticket in `Set-Cookie` header values, or null when there is none. */
-    fun fromSetCookies(headers: List<String>, cookieName: String): String? =
-        headers.firstNotNullOfOrNull { valueOf(it.substringBefore(';'), cookieName) }
+    fun fromSetCookies(headers: List<String>, cookieName: String, usable: (String) -> Boolean = { true }): String? =
+        headers.firstNotNullOfOrNull { header -> valueOf(header.substringBefore(';'), cookieName)?.takeIf(usable) }
 
     private fun valueOf(pair: String, cookieName: String): String? {
         val trimmed = pair.trim()

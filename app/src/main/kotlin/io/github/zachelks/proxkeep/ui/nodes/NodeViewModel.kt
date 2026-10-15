@@ -3,9 +3,9 @@ package io.github.zachelks.proxkeep.ui.nodes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.core.api.PveClient
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
 import io.github.zachelks.proxkeep.core.api.model.NodeCertificate
 import io.github.zachelks.proxkeep.core.api.model.NodeDns
@@ -162,13 +162,11 @@ class NodeViewModel(
         _busy.value = operation
         viewModelScope.launch {
             try {
-                val upid = servers.request(start)
-                if (follow && upid != null) {
-                    val status = servers.request { it.awaitTask(node, upid, pollIntervalMs = POLL_MS) }
-                    if (!status.succeeded) {
-                        _messages.emit(UiMessage(R.string.node_operation_failed, status.exitstatus))
-                        return@launch
-                    }
+                val reply = servers.request(start)
+                val status = if (follow) servers.request { it.awaitIfTask(reply, pollIntervalMs = POLL_MS) } else null
+                if (status != null && !status.succeeded) {
+                    _messages.emit(UiMessage(R.string.node_operation_failed, status.exitstatus))
+                    return@launch
                 }
                 _messages.emit(UiMessage(done))
                 refreshSignal.request()

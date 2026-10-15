@@ -1,7 +1,7 @@
 package io.github.zachelks.proxkeep.data
 
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveApiException
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import kotlinx.coroutines.CoroutineScope
@@ -55,11 +55,9 @@ class GuestActions(
         _busy.update { it + (key to action) }
         scope.launch {
             try {
-                val result = servers.request { client ->
-                    val upid = client.guestAction(node, resource.kind, vmid, action)
-                    client.awaitTask(node, upid)
-                }
-                _events.emit(ActionEvent(action, guestName, result.succeeded, result.exitstatus.takeUnless { result.succeeded }))
+                val result = servers.request { client -> client.awaitIfTask(client.guestAction(node, resource.kind, vmid, action)) }
+                val succeeded = result?.succeeded ?: true
+                _events.emit(ActionEvent(action, guestName, succeeded, result?.exitstatus.takeUnless { succeeded }))
             } catch (e: PveApiException) {
                 if (!e.isAuthenticationFailure) {
                     _events.emit(ActionEvent(action, guestName, succeeded = false, detail = e.statusMessage))

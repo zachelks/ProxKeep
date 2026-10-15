@@ -3,9 +3,8 @@ package io.github.zachelks.proxkeep.ui.schema
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveApiException
-import io.github.zachelks.proxkeep.core.api.Upid
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.schema.ApiMethod
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SchemaRepository
@@ -40,6 +39,9 @@ import java.io.IOException
  * @property presets values a new object starts with, such as its type
  * @property read whether to read the object first; a `PUT` that adds rather
  *   than changes, such as a permission, does not
+ * @property digest the digest the change must carry instead of the one read now: the
+ *   list's, for an item addressed by position, so a list that changed since it was
+ *   shown refuses the change rather than apply it to another item
  */
 data class SchemaEditRequest(
     val path: String,
@@ -48,6 +50,7 @@ data class SchemaEditRequest(
     val exclude: Set<String> = emptySet(),
     val presets: Map<String, String> = emptyMap(),
     val read: Boolean = method == "PUT",
+    val digest: String? = null,
 )
 
 /** The form for one API object, built from its method in the server's schema. */
@@ -106,7 +109,7 @@ class SchemaEditViewModel(
                 method = found
                 val values = if (request.read) {
                     val current = servers.request { it.read(request.path) } as? JsonObject ?: JsonObject(emptyMap())
-                    digest = (current["digest"] as? JsonPrimitive)?.content
+                    digest = request.digest ?: (current["digest"] as? JsonPrimitive)?.content
                     flatten(current)
                 } else {
                     emptyMap()
@@ -127,7 +130,8 @@ class SchemaEditViewModel(
     fun save() {
         val form = (_form.value as? Loadable.Loaded)?.value ?: return
         val method = method ?: return
-        if (!form.isValid || _saving.value) return
+        // Saved means the screen is closing; a second tap must not create the object again.
+        if (!form.isValid || _saving.value || _saved.value || _secret.value != null) return
         val changes = form.changes
         val parameters = LinkedHashMap(changes.set)
         if (changes.delete.isNotEmpty() && method.parameter("delete") != null) parameters["delete"] = changes.delete.joinToString(",")
@@ -136,14 +140,11 @@ class SchemaEditViewModel(
         viewModelScope.launch {
             try {
                 val data = servers.request { it.writeForData(request.method, request.path, parameters) }
-                val task = (data as? JsonPrimitive)?.content?.let(Upid::parse)
                 val returned = ((data as? JsonObject)?.get("value") as? JsonPrimitive)?.content
-                if (task != null) {
-                    val status = servers.request { it.awaitTask(task.node, task.text) }
-                    if (!status.succeeded) {
-                        _messages.emit(UiMessage(R.string.config_save_failed, status.exitstatus))
-                        return@launch
-                    }
+                val status = servers.request { it.awaitIfTask((data as? JsonPrimitive)?.content) }
+                if (status != null && !status.succeeded) {
+                    _messages.emit(UiMessage(R.string.config_save_failed, status.exitstatus))
+                    return@launch
                 }
                 refreshSignal.request()
                 if (returned != null) _secret.value = returned else _saved.value = true

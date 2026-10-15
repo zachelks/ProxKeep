@@ -11,6 +11,7 @@ import io.github.zachelks.proxkeep.console.ConsoleManager
 import io.github.zachelks.proxkeep.console.ConsoleService
 import io.github.zachelks.proxkeep.data.AppSettings
 import io.github.zachelks.proxkeep.data.ClusterRepository
+import io.github.zachelks.proxkeep.data.CrashLog
 import io.github.zachelks.proxkeep.data.GuestActions
 import io.github.zachelks.proxkeep.data.GuestLifecycle
 import io.github.zachelks.proxkeep.data.KeyChainKeys
@@ -48,6 +49,7 @@ class ProxKeepApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog(crashLogFile(this)).install()
         container = AppContainer(this)
 
         // The process lifecycle starts and stops with the app as a whole, not
@@ -61,6 +63,9 @@ class ProxKeepApplication : Application() {
         )
     }
 }
+
+/** Where the last crash's report is kept. */
+fun crashLogFile(context: Context): File = File(context.filesDir, "last-crash.txt")
 
 class AppContainer(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -107,6 +112,8 @@ class AppContainer(context: Context) {
     val desktops = DesktopManager(repository, scope)
 
     val pendingNavigation = PendingNavigation()
+
+    val crashLog = CrashLog(crashLogFile(context))
 
     val settings = AppSettings(context)
 

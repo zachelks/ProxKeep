@@ -103,7 +103,7 @@ fun AppNavigation() {
             entry<Route.SchemaEdit> { route ->
                 SchemaEditScreen(
                     title = route.title,
-                    request = SchemaEditRequest(route.path, route.schemaPath, route.method, route.exclude.toSet(), route.presets, route.read),
+                    request = SchemaEditRequest(route.path, route.schemaPath, route.method, route.exclude.toSet(), route.presets, route.read, route.digest),
                     onClose = { navigator.close(route) },
                 )
             }
@@ -127,6 +127,7 @@ private fun TerminalEntry(navigator: Navigator) {
     val extraKeys by container.settings.extraKeys.collectAsStateWithLifecycle()
     val textSize by container.settings.terminalTextSize.collectAsStateWithLifecycle()
     val font by container.settings.terminalFont.collectAsStateWithLifecycle()
+    val palette by container.settings.terminalPalette.collectAsStateWithLifecycle()
     val console by consoles.current.collectAsStateWithLifecycle()
     val open = console
     if (open == null) {
@@ -144,6 +145,7 @@ private fun TerminalEntry(navigator: Navigator) {
         extraKeys = extraKeys,
         textSizeSp = textSize,
         font = font,
+        palette = palette,
         onTextSizeChange = container.settings::setTerminalTextSize,
     )
 }

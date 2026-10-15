@@ -778,11 +778,14 @@ class PveClient(
 
     /**
      * The path of a task. A Datacenter Manager relays a remote's tasks under
-     * the remote, which [Upid] reads from the task's ID.
+     * the remote, which [Upid] reads from the task's ID. A Backup Server and
+     * a Datacenter Manager name themselves `localhost` in their API, whatever
+     * host name their task IDs carry.
      */
     private fun taskPath(node: String, upid: String): List<String> {
-        val remote = Upid.parse(upid)?.remote?.takeIf { product == Product.Pdm }
-        return if (remote != null) listOf("pve", "remotes", remote, "tasks", upid) else listOf("nodes", node, "tasks", upid)
+        if (product == Product.Pve) return listOf("nodes", node, "tasks", upid)
+        val remote = Upid.parse(upid)?.remote
+        return if (remote != null) listOf("pve", "remotes", remote, "tasks", upid) else listOf("nodes", "localhost", "tasks", upid)
     }
 
     suspend fun taskStatus(node: String, upid: String): TaskStatus =

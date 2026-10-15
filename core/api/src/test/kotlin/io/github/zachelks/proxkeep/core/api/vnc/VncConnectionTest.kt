@@ -34,7 +34,7 @@ class VncConnectionTest {
     private val listener = object : VncConnection.Listener {
         override fun onConnected(desktop: DesktopInfo) { events += "connected ${desktop.name} ${desktop.width}x${desktop.height}" }
         override fun onUpdated(region: Region) { events += "updated $region" }
-        override fun onClosed(reason: String?) { events += "closed $reason" }
+        override fun onClosed(reason: String?, problem: RfbProblem?) { events += "closed $reason" }
     }
 
     @AfterTest

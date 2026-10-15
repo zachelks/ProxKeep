@@ -76,10 +76,10 @@ class RfbClient(
 
     private fun handshake() {
         val version = String(readBytes(VERSION_LENGTH), Charsets.US_ASCII)
-        val match = VERSION_PATTERN.matchEntire(version) ?: throw RfbException("Not a VNC server")
+        val match = VERSION_PATTERN.matchEntire(version) ?: throw RfbException(RfbProblem.Unsupported, "Not a VNC server")
         val major = match.groupValues[1].toInt()
         val minor = match.groupValues[2].toInt()
-        if (major != 3 || minor < 3) throw RfbException("Unsupported VNC version $major.$minor")
+        if (major != 3 || minor < 3) throw RfbException(RfbProblem.Unsupported, "Unsupported VNC version $major.$minor")
         minorVersion = when {
             minor >= 8 -> 8
             minor == 7 -> 7
@@ -96,7 +96,7 @@ class RfbClient(
         if (minorVersion >= 8 || security == SECURITY_VNC) {
             if (input.readInt() != 0) {
                 val reason = if (minorVersion >= 8) readString() else ""
-                throw RfbException(reason.ifBlank { "The server refused the password" })
+                throw RfbException(RfbProblem.Refused, "The server refused the password", serverReason = reason.takeIf { it.isNotBlank() })
             }
         }
 
@@ -117,17 +117,17 @@ class RfbClient(
     private fun chooseSecurity(): Int {
         if (minorVersion == 3) {
             val type = input.readInt()
-            if (type == SECURITY_INVALID) throw RfbException(readString())
+            if (type == SECURITY_INVALID) throw refused(readString())
             return type
         }
         val count = input.readUnsignedByte()
-        if (count == 0) throw RfbException(readString())
+        if (count == 0) throw refused(readString())
         val offered = readBytes(count).map { it.toInt() and 0xFF }
         val chosen = when {
             password != null && SECURITY_VNC in offered -> SECURITY_VNC
             SECURITY_NONE in offered -> SECURITY_NONE
             SECURITY_VNC in offered -> SECURITY_VNC
-            else -> throw RfbException("The server offers no sign-in this app supports")
+            else -> throw RfbException(RfbProblem.Unsupported, "The server offers no sign-in this app supports")
         }
         output.write(byteArrayOf(chosen.toByte()))
         return chosen
@@ -148,10 +148,10 @@ class RfbClient(
             MSG_CUT_TEXT -> {
                 readBytes(3)
                 val length = input.readInt()
-                if (length < 0 || length > MAX_CUT_TEXT) throw RfbException("The clipboard text is too long")
+                if (length < 0 || length > MAX_CUT_TEXT) throw RfbException(RfbProblem.TooLarge, "The clipboard text is too long")
                 listener.onClipboard(String(readBytes(length), Charsets.ISO_8859_1))
             }
-            else -> throw RfbException("Unknown server message $type")
+            else -> throw RfbException(RfbProblem.Damaged, "Unknown server message $type")
         }
     }
 
@@ -184,9 +184,12 @@ class RfbClient(
                 }
                 ENCODING_ZRLE -> {
                     val length = input.readInt()
-                    if (length < 0 || length > MAX_COMPRESSED) throw RfbException("A compressed rectangle is too large")
-                    val data = readBytes(length)
                     checkBounds(x, y, w, h)
+                    // More than the rectangle could need is refused before it is read into memory.
+                    if (length < 0 || length > MAX_COMPRESSED || length > zrle.maxCompressedSize(w, h)) {
+                        throw RfbException(RfbProblem.TooLarge, "A compressed rectangle is too large")
+                    }
+                    val data = readBytes(length)
                     zrle.decode(data, x, y, w, h, framebuffer)
                 }
                 ENCODING_DESKTOP_SIZE -> {
@@ -200,7 +203,7 @@ class RfbClient(
                     readCursor(x, y, w, h)
                     continue
                 }
-                else -> throw RfbException("The server used encoding $encoding, which was not asked for")
+                else -> throw RfbException(RfbProblem.Damaged, "The server used encoding $encoding, which was not asked for")
             }
             val region = Region(x, y, w, h)
             damage = damage?.union(region) ?: region
@@ -210,7 +213,7 @@ class RfbClient(
     }
 
     private fun readCursor(hotX: Int, hotY: Int, w: Int, h: Int) {
-        if (w > MAX_CURSOR_SIZE || h > MAX_CURSOR_SIZE) throw RfbException("The pointer is too large")
+        if (w > MAX_CURSOR_SIZE || h > MAX_CURSOR_SIZE) throw RfbException(RfbProblem.TooLarge, "The pointer is too large")
         val colors = readBytes(w * h * 4)
         val maskRow = (w + 7) / 8
         val mask = readBytes(maskRow * h)
@@ -223,14 +226,23 @@ class RfbClient(
         listener.onCursor(Cursor(w, h, hotX, hotY, pixels))
     }
 
-    /** A screen beyond [MAX_SCREEN_PIXELS] would not fit in memory, whatever the server asks for. */
+    /**
+     * A screen wider or taller than [MAX_SCREEN_SIDE] would not fit in memory,
+     * or in one GPU texture when drawn, whatever the server asks for.
+     */
     private fun checkScreenSize(width: Int, height: Int) {
-        if (width.toLong() * height > MAX_SCREEN_PIXELS) throw RfbException("The screen is too large to show ($width×$height)")
+        if (width > MAX_SCREEN_SIDE || height > MAX_SCREEN_SIDE) {
+            throw RfbException(RfbProblem.TooLarge, "The screen is too large to show ($width×$height)")
+        }
     }
+
+    /** The server's own refusal, with its reason when it gave one. */
+    private fun refused(reason: String) =
+        RfbException(RfbProblem.Refused, "The server refused the connection", serverReason = reason.takeIf { it.isNotBlank() })
 
     private fun checkBounds(x: Int, y: Int, w: Int, h: Int) {
         val fb = framebuffer
-        if (x + w > fb.width || y + h > fb.height) throw RfbException("The server drew outside the screen")
+        if (x + w > fb.width || y + h > fb.height) throw RfbException(RfbProblem.Damaged, "The server drew outside the screen")
     }
 
     // --- Client messages ------------------------------------------------------
@@ -309,7 +321,7 @@ class RfbClient(
 
     private fun readString(): String {
         val length = input.readInt()
-        if (length < 0 || length > MAX_STRING) throw RfbException("The server sent a string that is too long")
+        if (length < 0 || length > MAX_STRING) throw RfbException(RfbProblem.TooLarge, "The server sent a string that is too long")
         return String(readBytes(length), Charsets.UTF_8)
     }
 
@@ -352,8 +364,8 @@ class RfbClient(
         const val MAX_CUT_TEXT = 1024 * 1024
         const val MAX_COMPRESSED = 64 * 1024 * 1024
 
-        /** 4096 × 4096, which holds 4K and ultrawide screens. Each pixel takes 4 bytes. */
-        const val MAX_SCREEN_PIXELS = 4096L * 4096L
+        /** 4096 pixels a side holds 4K and most ultrawide screens. Each pixel takes 4 bytes. */
+        const val MAX_SCREEN_SIDE = 4096
 
         /** Pointers are 32 to 64 pixels wide; this leaves room for scaled ones. */
         const val MAX_CURSOR_SIZE = 256

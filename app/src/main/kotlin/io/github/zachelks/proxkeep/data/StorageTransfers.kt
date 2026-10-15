@@ -1,8 +1,8 @@
 package io.github.zachelks.proxkeep.data
 
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveApiException
 import io.github.zachelks.proxkeep.core.api.PveClient
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ChecksumAlgorithm
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -107,9 +107,9 @@ class StorageTransfers(
         scope.launch {
             val event = try {
                 val outcome = servers.request { client ->
-                    val upid = begin(client) ?: return@request null
+                    val reply = begin(client) ?: return@request null
                     update(transfer.id) { it.copy(storing = true) }
-                    client.awaitTask(transfer.node, upid, pollIntervalMs = POLL_MS)
+                    client.awaitIfTask(reply, pollIntervalMs = POLL_MS)
                 }
                 val succeeded = outcome?.succeeded ?: true
                 TransferEvent(transfer.fileName, transfer.storage, succeeded, outcome?.exitstatus.takeUnless { succeeded })

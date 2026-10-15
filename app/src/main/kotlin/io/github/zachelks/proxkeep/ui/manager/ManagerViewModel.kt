@@ -3,8 +3,7 @@ package io.github.zachelks.proxkeep.ui.manager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
-import io.github.zachelks.proxkeep.core.api.Upid
-import io.github.zachelks.proxkeep.core.api.awaitTask
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.pdm.PdmResource
 import io.github.zachelks.proxkeep.core.api.pdm.Remote
@@ -151,13 +150,11 @@ class ManagerViewModel(
         _busy.update { it + guest.id }
         viewModelScope.launch {
             try {
-                val task = servers.request { it.remoteGuestAction(remote, kind, vmid, action) }?.let(Upid::parse)
-                if (task != null) {
-                    val status = servers.request { it.awaitTask(task.node, task.text, pollIntervalMs = POLL_MS) }
-                    if (!status.succeeded) {
-                        _messages.emit(UiMessage(R.string.pdm_action_failed, status.exitstatus))
-                        return@launch
-                    }
+                val reply = servers.request { it.remoteGuestAction(remote, kind, vmid, action) }
+                val status = servers.request { it.awaitIfTask(reply, pollIntervalMs = POLL_MS) }
+                if (status != null && !status.succeeded) {
+                    _messages.emit(UiMessage(R.string.pdm_action_failed, status.exitstatus))
+                    return@launch
                 }
                 _messages.emit(UiMessage(R.string.pdm_action_done))
                 refreshSignal.request()

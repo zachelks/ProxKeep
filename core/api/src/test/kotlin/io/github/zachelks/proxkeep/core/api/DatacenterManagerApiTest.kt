@@ -5,7 +5,6 @@ import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.core.api.pdm.remoteGuestAction
 import io.github.zachelks.proxkeep.core.api.pdm.remoteGuestTemplate
-import io.github.zachelks.proxkeep.core.api.pdm.remoteOfTask
 import io.github.zachelks.proxkeep.core.api.pdm.remoteResources
 import io.github.zachelks.proxkeep.core.api.pdm.remotes
 import kotlinx.coroutines.runBlocking
@@ -89,8 +88,8 @@ class DatacenterManagerApiTest {
         val request = server.takeRequest()
         assertEquals("POST", request.method)
         assertEquals("/api2/json/pve/remotes/prod/lxc/200/shutdown", request.requestUrl!!.encodedPath)
-        assertEquals("prod", remoteOfTask(upid!!))
-        assertNull(remoteOfTask("UPID:pdm:1:2:3:4:x::root@pam:"))
+        assertEquals("prod", Upid.parse(upid!!)?.remote)
+        assertNull(Upid.parse("UPID:pdm:1:2:3:4:x::root@pam:")?.remote)
         assertEquals("/pve/remotes/{remote}/qemu/{vmid}/remote-migrate", remoteGuestTemplate(ResourceKind.Qemu, "/remote-migrate"))
     }
 
@@ -112,7 +111,7 @@ class DatacenterManagerApiTest {
         enqueue("""{"data":{"status":"stopped","exitstatus":"OK"}}""")
         assertTrue(client.taskStatus("localhost", upid).succeeded)
         assertEquals(listOf("api2", "json", "nodes", "localhost", "tasks", upid, "status"), server.takeRequest().requestUrl!!.pathSegments)
-        assertNull(remoteOfTask(upid))
+        assertNull(Upid.parse(upid)?.remote)
     }
 
     @Test

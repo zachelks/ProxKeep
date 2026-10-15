@@ -1,9 +1,8 @@
 package io.github.zachelks.proxkeep.data
 
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveApiException
 import io.github.zachelks.proxkeep.core.api.PveClient
-import io.github.zachelks.proxkeep.core.api.Upid
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import kotlinx.coroutines.CoroutineScope
@@ -83,8 +82,7 @@ class GuestLifecycle(
             try {
                 val outcome = servers.request { client ->
                     // The task runs on the node in its ID, which for a migration is the source.
-                    val task = start(client, guest)?.let(Upid::parse) ?: return@request null
-                    client.awaitTask(task.node, task.text, pollIntervalMs = POLL_MS)
+                    client.awaitIfTask(start(client, guest), pollIntervalMs = POLL_MS)
                 }
                 val succeeded = outcome?.succeeded ?: true
                 _events.emit(LifecycleEvent(operation, guestName, succeeded, outcome?.exitstatus.takeUnless { succeeded }))

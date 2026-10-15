@@ -295,7 +295,7 @@ class PveClientTest {
         enqueue("""{"data":{"status":"running","type":"qmstart","id":"100"}}""")
         enqueue("""{"data":{"status":"stopped","exitstatus":"OK","type":"qmstart","id":"100"}}""")
 
-        val result = client.awaitTask("pve1", upid, pollIntervalMs = 1)
+        val result = client.awaitTask(Upid.parse(upid)!!, pollIntervalMs = 1)
 
         assertTrue(result.succeeded)
         assertEquals(3, server.requestCount)
@@ -306,7 +306,7 @@ class PveClientTest {
     fun awaitTaskReportsAFailedTask(): Unit = runBlocking {
         enqueue("""{"data":{"status":"stopped","exitstatus":"can't lock file - got timeout"}}""")
 
-        val result = client.awaitTask("pve1", upid, pollIntervalMs = 1)
+        val result = client.awaitTask(Upid.parse(upid)!!, pollIntervalMs = 1)
 
         assertFalse(result.succeeded)
         assertEquals("can't lock file - got timeout", result.exitstatus)
@@ -316,7 +316,7 @@ class PveClientTest {
     fun awaitTaskDoesNotRetryAnErrorFromTheServer(): Unit = runBlocking {
         enqueue("""{"data":null}""", code = 403, reason = "Permission check failed")
 
-        assertFailsWith<PveApiException> { client.awaitTask("pve1", upid, pollIntervalMs = 1) }
+        assertFailsWith<PveApiException> { client.awaitTask(Upid.parse(upid)!!, pollIntervalMs = 1) }
         assertEquals(1, server.requestCount)
     }
 

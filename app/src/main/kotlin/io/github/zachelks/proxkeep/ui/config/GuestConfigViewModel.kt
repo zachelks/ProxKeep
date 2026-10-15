@@ -3,9 +3,8 @@ package io.github.zachelks.proxkeep.ui.config
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveApiException
-import io.github.zachelks.proxkeep.core.api.Upid
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ClusterResource
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.NodeStorage
@@ -225,13 +224,11 @@ class GuestConfigViewModel(
         _saving.value = true
         viewModelScope.launch {
             try {
-                val task = start()?.let(Upid::parse)
-                if (task != null) {
-                    val status = servers.request { it.awaitTask(task.node, task.text, pollIntervalMs = POLL_MS) }
-                    if (!status.succeeded) {
-                        _messages.emit(UiMessage(R.string.config_save_failed, status.exitstatus))
-                        return@launch
-                    }
+                val reply = start()
+                val status = servers.request { it.awaitIfTask(reply, pollIntervalMs = POLL_MS) }
+                if (status != null && !status.succeeded) {
+                    _messages.emit(UiMessage(R.string.config_save_failed, status.exitstatus))
+                    return@launch
                 }
                 onSaved()
                 guest.value?.let { load(it) }

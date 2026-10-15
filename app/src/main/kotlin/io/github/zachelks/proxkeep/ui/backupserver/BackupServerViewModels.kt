@@ -3,8 +3,8 @@ package io.github.zachelks.proxkeep.ui.backupserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveClient
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.pbs.BackupGroup
 import io.github.zachelks.proxkeep.core.api.pbs.BackupNamespace
 import io.github.zachelks.proxkeep.core.api.pbs.BackupServerStatus
@@ -97,13 +97,11 @@ abstract class BackupServerViewModel(
         _busy.value = true
         viewModelScope.launch {
             try {
-                val upid = servers.request(start)
-                if (wait && upid != null) {
-                    val status = servers.request { it.awaitTask(PBS_NODE, upid, pollIntervalMs = POLL_MS) }
-                    if (!status.succeeded) {
-                        _messages.emit(UiMessage(R.string.pbs_task_failed, status.exitstatus))
-                        return@launch
-                    }
+                val reply = servers.request(start)
+                val status = if (wait) servers.request { it.awaitIfTask(reply, pollIntervalMs = POLL_MS) } else null
+                if (status != null && !status.succeeded) {
+                    _messages.emit(UiMessage(R.string.pbs_task_failed, status.exitstatus))
+                    return@launch
                 }
                 _messages.emit(UiMessage(done))
                 refreshSignal.request()

@@ -4,6 +4,7 @@ import io.github.zachelks.proxkeep.core.api.vnc.Cursor
 import io.github.zachelks.proxkeep.core.api.vnc.DesktopInfo
 import io.github.zachelks.proxkeep.core.api.vnc.Framebuffer
 import io.github.zachelks.proxkeep.core.api.vnc.Region
+import io.github.zachelks.proxkeep.core.api.vnc.RfbProblem
 import io.github.zachelks.proxkeep.core.api.vnc.VncConnection
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,7 +23,11 @@ sealed interface DesktopState {
     data class Connected(val desktop: DesktopInfo) : DesktopState
 
     /** @property reason why the connection ended, when the server or network said */
-    data class Closed(val reason: String?) : DesktopState
+    /**
+     * @property reason why, in the server's or network's words, when they gave one
+     * @property problem what went wrong in the protocol, which the app words itself
+     */
+    data class Closed(val reason: String?, val problem: RfbProblem? = null) : DesktopState
 }
 
 /** Where keys and pointer moves for a desktop go. */
@@ -86,8 +91,8 @@ class DesktopSession(val title: String, val node: String, val vmid: Int) : VncCo
     }
 
     /** Records that the desktop could not be opened at all. */
-    fun fail(reason: String?) {
-        if (_state.value !is DesktopState.Closed) _state.value = DesktopState.Closed(reason)
+    fun fail(reason: String?, problem: RfbProblem? = null) {
+        if (_state.value !is DesktopState.Closed) _state.value = DesktopState.Closed(reason, problem)
     }
 
     /** Ends the session for good. */
@@ -138,8 +143,8 @@ class DesktopSession(val title: String, val node: String, val vmid: Int) : VncCo
         _events.tryEmit(DesktopEvent.Clipboard(text))
     }
 
-    override fun onClosed(reason: String?) {
-        fail(reason)
+    override fun onClosed(reason: String?, problem: RfbProblem?) {
+        fail(reason, problem)
     }
 
     private fun markDamaged(region: Region) {

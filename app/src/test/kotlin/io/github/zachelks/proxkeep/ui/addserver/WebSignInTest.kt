@@ -44,6 +44,11 @@ class WebSignInTest {
             ticketFromCookies("__Host-PDMAuthCookie=PDM%3Aadmin%40pdm%3A6712F3A1%3A%3Ac2ln", "PDMAuthCookie"),
             "newer servers name the cookie with the __Host- prefix",
         )
+        assertEquals(
+            "PVE:alice@oidc:6712F3A1::c2ln",
+            ticketFromCookies("PVEAuthCookie=PVE%3A!tfa!%7B%7D%3A6712F3A1%3A%3Ac2ln; __Host-PVEAuthCookie=PVE%3Aalice%40oidc%3A6712F3A1%3A%3Ac2ln", "PVEAuthCookie"),
+            "a challenge left in one spelling does not hide the ticket in the other",
+        )
         assertNull(ticketFromCookies(null, "PVEAuthCookie"))
         assertNull(ticketFromCookies("lang=en", "PVEAuthCookie"))
         assertNull(ticketFromCookies("PVEAuthCookie=PVE%3A!tfa!%7B%7D%3A6712F3A1%3A%3Ac2ln", "PVEAuthCookie"), "a challenge is not a session")

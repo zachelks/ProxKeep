@@ -65,12 +65,20 @@ fun collectionViewModel(spec: CollectionSpec, args: Map<String, String>): Collec
  * @param subtitle names the parent an item list belongs to, such as the IP set whose entries these are
  */
 @Composable
-fun CollectionScreen(specId: String, args: Map<String, String>, subtitle: String?, onClose: () -> Unit, onOpenRoute: (Route) -> Unit) {
+fun CollectionScreen(
+    specId: String,
+    args: Map<String, String>,
+    subtitle: String?,
+    onClose: () -> Unit,
+    onOpenRoute: (Route) -> Unit,
+    viewModel: CollectionViewModel? = null,
+) {
     val spec = Collections.get(specId) ?: run {
         LaunchedEffect(Unit) { onClose() }
         return
     }
-    val viewModel = collectionViewModel(spec, args)
+    @Suppress("NAME_SHADOWING")
+    val viewModel = viewModel ?: collectionViewModel(spec, args)
     val items by viewModel.items.collectAsStateWithLifecycle()
     val abilities by viewModel.abilities.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
@@ -102,7 +110,17 @@ fun CollectionScreen(specId: String, args: Map<String, String>, subtitle: String
     }
     val edit: (CollectionItem) -> Unit = { item ->
         spec.item(args, item.id)?.let { path ->
-            onOpenRoute(Route.SchemaEdit("$title: ${item.id}", path, spec.itemPath!!, "PUT", exclude = spec.exclude + listOfNotNull("type".takeIf { spec.types.isNotEmpty() })))
+            onOpenRoute(
+                Route.SchemaEdit(
+                    "$title: ${item.id}",
+                    path,
+                    spec.itemPath!!,
+                    "PUT",
+                    exclude = spec.exclude + listOfNotNull("type".takeIf { spec.types.isNotEmpty() }),
+                    // The item at this position may have changed since the list was read.
+                    digest = item.values["digest"].takeIf { spec.positional },
+                ),
+            )
         }
     }
 

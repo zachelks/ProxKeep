@@ -78,6 +78,7 @@ sealed interface Route {
         val exclude: List<String> = emptyList(),
         val presets: Map<String, String> = emptyMap(),
         val read: Boolean = method == "PUT",
+        val digest: String? = null,
     ) : Route
 
     /** A datacenter collection, such as the firewall's aliases. See [io.github.zachelks.proxkeep.ui.datacenter.Collections]. */

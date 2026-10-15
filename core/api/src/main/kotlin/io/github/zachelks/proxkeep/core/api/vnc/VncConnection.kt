@@ -29,8 +29,9 @@ class VncConnection private constructor(
          * The connection is over. Called exactly once, however it ended.
          *
          * @param reason why, when the server or the network gave one
+         * @param problem what went wrong in the protocol, which the app words itself
          */
-        fun onClosed(reason: String?)
+        fun onClosed(reason: String?, problem: RfbProblem?)
     }
 
     private lateinit var socket: WebSocket
@@ -50,25 +51,27 @@ class VncConnection private constructor(
         if (!finished.get()) socket.send(bytes.toByteString())
     }
 
-    private fun finish(reason: String?) {
+    private fun finish(reason: String?, problem: RfbProblem? = null) {
         if (!finished.compareAndSet(false, true)) return
         input.close()
-        listener.onClosed(reason?.takeIf { it.isNotBlank() })
+        listener.onClosed(reason?.takeIf { it.isNotBlank() }, problem)
     }
 
     private fun runProtocol() {
+        var problem: RfbProblem? = null
         val reason = try {
             client.run()
             null
         } catch (e: EOFException) {
             null
         } catch (e: RfbException) {
-            e.message
+            problem = e.problem
+            e.serverReason
         } catch (e: IOException) {
             e.message
         }
         socket.close(NORMAL_CLOSURE, null)
-        finish(reason)
+        finish(reason, problem)
     }
 
     private inner class SocketListener : WebSocketListener() {

@@ -143,7 +143,9 @@ class RfbClientTest {
         worker.join(5_000)
 
         val error = assertIs<RfbException>(failure)
-        assertEquals("Authentication failed", error.message)
+        assertEquals(RfbProblem.Refused, error.problem)
+        // The server's own words are kept for the person to read.
+        assertEquals("Authentication failed", error.serverReason)
     }
 
     @Test
@@ -363,7 +365,18 @@ class RfbClientTest {
         update(1) { rectangle(0, 0, 65535, 65535, -223) }
         worker.join(5_000)
 
-        assertIs<RfbException>(failure)
+        assertEquals(RfbProblem.TooLarge, assertIs<RfbException>(failure).problem)
+    }
+
+    @Test
+    fun aScreenTooWideToDrawIsRefused() {
+        handshake()
+
+        // Few pixels in all, but far wider than any GPU texture.
+        update(1) { rectangle(0, 0, 65535, 16, -223) }
+        worker.join(5_000)
+
+        assertEquals(RfbProblem.TooLarge, assertIs<RfbException>(failure).problem)
     }
 
     @Test

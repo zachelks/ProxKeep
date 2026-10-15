@@ -3,8 +3,8 @@ package io.github.zachelks.proxkeep.ui.storage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveClient
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.model.ApplianceTemplate
 import io.github.zachelks.proxkeep.core.api.model.ChecksumAlgorithm
 import io.github.zachelks.proxkeep.core.api.model.NodeStorage
@@ -125,13 +125,11 @@ class StorageViewModel(
         _busy.value = true
         viewModelScope.launch {
             try {
-                val upid = servers.request { it.deleteVolume(node, storage, volume.volid) }
-                if (upid != null) {
-                    val status = servers.request { it.awaitTask(node, upid, pollIntervalMs = POLL_MS) }
-                    if (!status.succeeded) {
-                        _messages.emit(UiMessage(R.string.storage_delete_failed, status.exitstatus))
-                        return@launch
-                    }
+                val reply = servers.request { it.deleteVolume(node, storage, volume.volid) }
+                val status = servers.request { it.awaitIfTask(reply, pollIntervalMs = POLL_MS) }
+                if (status != null && !status.succeeded) {
+                    _messages.emit(UiMessage(R.string.storage_delete_failed, status.exitstatus))
+                    return@launch
                 }
                 _messages.emit(UiMessage(R.string.storage_deleted))
                 refreshSignal.request()

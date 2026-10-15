@@ -25,6 +25,8 @@ data class ItemAction(val label: Int, val method: String, val path: String, val 
  * @property child the collection an item opens, with [itemParam] filled from the item
  * @property readOnlyWhen a key and value that mark an item as built in, so it cannot be edited or deleted
  * @property aclStyle whether this is the permissions list, whose entries have no paths of their own
+ * @property positional whether items are addressed by their position in the list, such as firewall rules,
+ *   so a change to a stale list must carry the list's digest to be refused rather than hit another item
  */
 data class CollectionSpec(
     val id: String,
@@ -45,6 +47,7 @@ data class CollectionSpec(
     val actions: List<ItemAction> = emptyList(),
     val aclStyle: Boolean = false,
     val exclude: List<String> = emptyList(),
+    val positional: Boolean = false,
 ) {
     fun list(args: Map<String, String>): String = fill(listPath, args)
 
@@ -105,7 +108,7 @@ object Collections {
         CollectionSpec(
             id = "fw-rules", title = R.string.dc_firewall_rules, listPath = "/cluster/firewall/rules", idKey = "pos",
             titleKeys = listOf("action", "type"), detailKeys = firewallRuleKeys,
-            itemPath = "/cluster/firewall/rules/{pos}", itemParam = "pos",
+            itemPath = "/cluster/firewall/rules/{pos}", itemParam = "pos", positional = true,
         ),
         CollectionSpec(
             id = "fw-groups", title = R.string.dc_security_groups, listPath = "/cluster/firewall/groups", idKey = "group",
@@ -115,7 +118,7 @@ object Collections {
         CollectionSpec(
             id = "fw-group-rules", title = R.string.dc_firewall_rules, listPath = "/cluster/firewall/groups/{group}", idKey = "pos",
             titleKeys = listOf("action", "type"), detailKeys = firewallRuleKeys,
-            itemPath = "/cluster/firewall/groups/{group}/{pos}", itemParam = "pos",
+            itemPath = "/cluster/firewall/groups/{group}/{pos}", itemParam = "pos", positional = true,
         ),
         CollectionSpec(
             id = "fw-aliases", title = R.string.dc_aliases, listPath = "/cluster/firewall/aliases", idKey = "name",

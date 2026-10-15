@@ -3,9 +3,8 @@ package io.github.zachelks.proxkeep.ui.datacenter
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveClient
-import io.github.zachelks.proxkeep.core.api.Upid
-import io.github.zachelks.proxkeep.core.api.awaitTask
 import io.github.zachelks.proxkeep.core.api.schema.ApiSchema
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SchemaRepository
@@ -61,10 +60,20 @@ class CollectionViewModel(
     private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = MESSAGE_BUFFER)
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
+    /**
+     * Whether an item's delete takes the list's digest, from the schema once
+     * it has loaded. Until then, or without a schema, [CollectionSpec.positional]
+     * decides: every version takes a digest where items are addressed by position.
+     */
+    @Volatile
+    private var deleteTakesDigest: Boolean = spec.positional
+
     init {
         viewModelScope.launch {
             try {
-                _abilities.value = abilitiesFrom(schemas.schema(), spec, _abilities.value)
+                val schema = schemas.schema()
+                _abilities.value = abilitiesFrom(schema, spec, _abilities.value)
+                spec.itemPath?.let { schema.method(it, "DELETE") }?.let { delete -> deleteTakesDigest = delete.parameter(DIGEST) != null }
             } catch (e: IOException) {
                 // Without the schema, the collection's description stands.
             }
@@ -90,15 +99,9 @@ class CollectionViewModel(
      * rules are addressed by position, so without it a stale list deletes
      * whichever rule has that position now.
      */
-    private suspend fun digestFor(item: CollectionItem): Map<String, String> {
+    private fun digestFor(item: CollectionItem): Map<String, String> {
         val digest = item.values[DIGEST] ?: return emptyMap()
-        val takesDigest = try {
-            spec.itemPath?.let { schemas.schema().method(it, "DELETE")?.parameter(DIGEST) } != null
-        } catch (e: IOException) {
-            // Without the schema, rely on what every version does: position-addressed items take a digest.
-            spec.idKey == POSITION_KEY
-        }
-        return if (takesDigest) mapOf(DIGEST to digest) else emptyMap()
+        return if (deleteTakesDigest) mapOf(DIGEST to digest) else emptyMap()
     }
 
     fun run(item: CollectionItem, action: ItemAction) = change(action.done) { client ->
@@ -111,13 +114,11 @@ class CollectionViewModel(
         viewModelScope.launch {
             try {
                 // Some calls answer with something other than a task, such as a new object's ID.
-                val task = servers.request { block(it) }?.let(Upid::parse)
-                if (task != null) {
-                    val status = servers.request { it.awaitTask(task.node, task.text) }
-                    if (!status.succeeded) {
-                        _messages.emit(UiMessage(R.string.dc_failed, status.exitstatus))
-                        return@launch
-                    }
+                val reply = servers.request { block(it) }
+                val status = servers.request { it.awaitIfTask(reply) }
+                if (status != null && !status.succeeded) {
+                    _messages.emit(UiMessage(R.string.dc_failed, status.exitstatus))
+                    return@launch
                 }
                 _messages.emit(UiMessage(done))
                 refreshSignal.request()
@@ -157,7 +158,6 @@ class CollectionViewModel(
         private const val MESSAGE_BUFFER = 8
         private const val REFRESH_MS = 15_000L
         private const val DIGEST = "digest"
-        private const val POSITION_KEY = "pos"
 
         fun abilitiesFrom(schema: ApiSchema, spec: CollectionSpec, fallback: CollectionAbilities): CollectionAbilities {
             val createPath = if (spec.createWithId) spec.itemPath else spec.listPath

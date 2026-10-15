@@ -159,6 +159,6 @@ private fun SslCertificate.toX509(): X509Certificate? {
  * signed in yet. A second-factor challenge in the cookie is not usable.
  */
 internal fun ticketFromCookies(cookies: String?, cookieName: String): String? =
-    TicketCookie.fromCookieHeader(cookies, cookieName)?.takeIf { TicketCredentials.usernameFromTicket(it) != null }
+    TicketCookie.fromCookieHeader(cookies, cookieName) { TicketCredentials.usernameFromTicket(it) != null }
 
 private const val COOKIE_POLL_MS = 500L

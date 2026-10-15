@@ -91,6 +91,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.vnc.Cursor
 import io.github.zachelks.proxkeep.core.api.vnc.Region
+import io.github.zachelks.proxkeep.core.api.vnc.RfbProblem
 import io.github.zachelks.proxkeep.desktop.DesktopEvent
 import io.github.zachelks.proxkeep.desktop.DesktopSession
 import io.github.zachelks.proxkeep.desktop.DesktopState
@@ -484,9 +485,27 @@ private fun ClosedCard(state: DesktopState.Closed, onReconnect: () -> Unit, onCl
 private fun stateLabel(state: DesktopState): String = when (state) {
     DesktopState.Connecting -> stringResource(R.string.console_connecting)
     is DesktopState.Connected -> stringResource(R.string.desktop_size, state.desktop.width, state.desktop.height)
-    is DesktopState.Closed -> state.reason?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.console_closed_reason, it) }
-        ?: stringResource(R.string.console_closed)
+    is DesktopState.Closed -> {
+        val reason = state.reason?.takeIf { it.isNotBlank() }
+        when {
+            state.problem != null -> {
+                val text = stringResource(state.problem.text)
+                if (reason != null) "$text\n$reason" else text
+            }
+            reason != null -> stringResource(R.string.console_closed_reason, reason)
+            else -> stringResource(R.string.console_closed)
+        }
+    }
 }
+
+/** The words for what went wrong in a desktop's protocol. */
+val RfbProblem.text: Int
+    get() = when (this) {
+        RfbProblem.Unsupported -> R.string.desktop_problem_unsupported
+        RfbProblem.Damaged -> R.string.desktop_problem_damaged
+        RfbProblem.TooLarge -> R.string.desktop_problem_too_large
+        RfbProblem.Refused -> R.string.desktop_problem_refused
+    }
 
 /** Hides the status and navigation bars while the desktop is on screen. A swipe brings them back briefly. */
 @Composable
