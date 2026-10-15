@@ -39,6 +39,7 @@ class ClusterRepository(
     private val servers: ServerRepository,
     private val refresh: RefreshSignal,
     scope: CoroutineScope,
+    private val onLoaded: (ClusterState.Loaded) -> Unit = {},
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<ClusterState> = servers.activeProfileId
@@ -53,7 +54,7 @@ class ClusterRepository(
         emit(current)
         refresh.ticks().collect {
             current = try {
-                ClusterState.Loaded(profileId, servers.request { it.clusterResources() })
+                ClusterState.Loaded(profileId, servers.request { it.clusterResources() }).also(onLoaded)
             } catch (e: IOException) {
                 val previous = current
                 if (previous is ClusterState.Loaded) previous.copy(refreshError = e) else ClusterState.Failed(e)

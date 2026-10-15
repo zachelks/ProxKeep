@@ -3,6 +3,7 @@
 package io.github.zachelks.proxkeep.ui.guests
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -10,7 +11,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -26,8 +31,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -40,6 +50,7 @@ import io.github.zachelks.proxkeep.core.api.model.Privilege
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.ServerAccess
+import io.github.zachelks.proxkeep.data.Session
 import io.github.zachelks.proxkeep.ui.TopBar
 import io.github.zachelks.proxkeep.ui.appContainer
 import io.github.zachelks.proxkeep.ui.cluster.ClusterContent
@@ -47,6 +58,11 @@ import io.github.zachelks.proxkeep.ui.cluster.StaleBanner
 import io.github.zachelks.proxkeep.ui.cluster.statusText
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
+import io.github.zachelks.proxkeep.ui.lifecycle.LifecycleDialog
+import io.github.zachelks.proxkeep.ui.lifecycle.LifecycleMenuItem
+import io.github.zachelks.proxkeep.ui.lifecycle.availableLifecycleItems
+import io.github.zachelks.proxkeep.ui.lifecycle.lifecycleViewModel
+import io.github.zachelks.proxkeep.ui.navigation.Route
 import kotlinx.coroutines.launch
 
 /**
@@ -54,9 +70,20 @@ import kotlinx.coroutines.launch
  * one. Phones show one at a time; wider windows show them side by side.
  *
  * @param onConsoleOpened called after a guest's console has been opened, to show it
+ * @param onDesktopOpened called after a virtual machine's display has been opened, to show it
+ * @param onOpenRoute opens a full screen, such as a guest's snapshots
+ * @param guestToOpen a guest to show, for example one picked in search
+ * @param onGuestOpened called once [guestToOpen] is on screen
  */
 @Composable
-fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
+fun GuestsPane(
+    topBar: TopBar,
+    onConsoleOpened: () -> Unit,
+    onDesktopOpened: () -> Unit = {},
+    onOpenRoute: (Route) -> Unit = {},
+    guestToOpen: String? = null,
+    onGuestOpened: () -> Unit = {},
+) {
     val container = appContainer()
     val viewModel = viewModel {
         GuestsViewModel(
@@ -66,6 +93,8 @@ fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
             container.guestActions,
             container.consoles,
             container.refresh,
+            container.desktops,
+            container.guestLifecycle,
         )
     }
     val cluster by viewModel.cluster.collectAsStateWithLifecycle()
@@ -81,10 +110,27 @@ fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
     val scope = rememberCoroutineScope()
     val detail by viewModel.detail.collectAsStateWithLifecycle()
     val busyGuests by viewModel.busyGuests.collectAsStateWithLifecycle()
+    val lifecycleBusy by viewModel.lifecycleBusy.collectAsStateWithLifecycle()
+    var lifecycleDialog by remember { mutableStateOf<Pair<String, LifecycleMenuItem>?>(null) }
     val access by viewModel.access.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
+    val timeframe by viewModel.timeframe.collectAsStateWithLifecycle()
 
     val selectedId = navigator.currentDestination?.contentKey
     LaunchedEffect(selectedId) { viewModel.select(selectedId) }
+    val context = LocalContext.current
+    val session by container.repository.session.collectAsStateWithLifecycle()
+    LaunchedEffect(selectedId) {
+        val active = session as? Session.Active ?: return@LaunchedEffect
+        val guest = loaded.resources.firstOrNull { it.id == selectedId } ?: return@LaunchedEffect
+        pushGuestShortcut(context, active.profile.id, active.profile.name, guest)
+    }
+    LaunchedEffect(guestToOpen) {
+        if (guestToOpen != null) {
+            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, guestToOpen)
+            onGuestOpened()
+        }
+    }
 
     val listIsHidden = navigator.scaffoldValue[ListDetailPaneScaffoldRole.List] == PaneAdaptedValue.Hidden
 
@@ -97,6 +143,8 @@ fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
                     cluster = loaded,
                     selectedId = selectedId,
                     busyGuests = busyGuests,
+                    canCreate = access?.allows(listOf(CREATE_PATH), Privilege.VM_ALLOCATE) ?: true,
+                    onCreate = { kind -> onOpenRoute(if (kind == ResourceKind.Qemu) Route.CreateVm else Route.CreateContainer) },
                     onSelect = { id ->
                         scope.launch { navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, id) }
                     },
@@ -114,6 +162,9 @@ fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
                         GuestDetailPane(
                             resource = resource,
                             detail = detail?.takeIf { it.resourceId == selectedId },
+                            history = history?.takeIf { it.resourceId == selectedId },
+                            timeframe = timeframe,
+                            onTimeframe = viewModel::selectTimeframe,
                             busyAction = busyGuests[selectedId],
                             canPowerManage = resource != null && access.allowsOn(resource, Privilege.VM_POWER_MGMT),
                             canOpenConsole = resource != null && access.allowsOn(resource, Privilege.VM_CONSOLE),
@@ -126,15 +177,51 @@ fun GuestsPane(topBar: TopBar, onConsoleOpened: () -> Unit) {
                                     onConsoleOpened()
                                 }
                             },
+                            onOpenDisplay = {
+                                resource?.let {
+                                    viewModel.openDesktop(it)
+                                    onDesktopOpened()
+                                }
+                            },
+                            lifecycleItems = resource?.let { guest ->
+                                val onlineNodes = loaded.resources.count { it.kind == ResourceKind.Node && it.status == "online" }
+                                availableLifecycleItems(guest, { privilege -> access.allowsOn(guest, privilege) }, onlineNodes)
+                            }.orEmpty(),
+                            lifecycleBusy = lifecycleBusy[selectedId],
+                            onLifecycle = { item ->
+                                when (item) {
+                                    LifecycleMenuItem.Configure -> onOpenRoute(Route.GuestConfig(selectedId))
+                                    LifecycleMenuItem.Snapshots -> onOpenRoute(Route.Snapshots(selectedId))
+                                    LifecycleMenuItem.Backups -> onOpenRoute(Route.Backups(selectedId))
+                                    else -> lifecycleDialog = selectedId to item
+                                }
+                            },
                         )
                     }
                 }
             }
         },
     )
+
+    lifecycleDialog?.let { (resourceId, item) ->
+        LifecycleDialogHost(resourceId, item, loaded.resources.firstOrNull { it.id == resourceId }) { lifecycleDialog = null }
+    }
+}
+
+@Composable
+private fun LifecycleDialogHost(resourceId: String, item: LifecycleMenuItem, guest: ClusterResource?, onDone: () -> Unit) {
+    if (guest == null) {
+        // The guest is gone, for example deleted elsewhere.
+        LaunchedEffect(Unit) { onDone() }
+        return
+    }
+    LifecycleDialog(item, guest, lifecycleViewModel(resourceId), onDone)
 }
 
 /** Whether to offer something that needs [privilege] on [guest]. */
+/** New guests are allocated under this path; a pool member needs the privilege on its pool, which the server checks. */
+private const val CREATE_PATH = "/vms"
+
 private fun ServerAccess?.allowsOn(guest: ClusterResource, privilege: String): Boolean {
     val vmid = guest.vmid ?: return true
     return this?.allows(Permissions.guestPaths(vmid, guest.pool), privilege) ?: true
@@ -146,12 +233,36 @@ private fun GuestList(
     cluster: ClusterState.Loaded,
     selectedId: String?,
     busyGuests: Map<String, GuestAction>,
+    canCreate: Boolean,
+    onCreate: (ResourceKind) -> Unit,
     onSelect: (String) -> Unit,
 ) {
     val guests = cluster.resources.filter { it.isGuest }.sortedBy { it.vmid ?: Int.MAX_VALUE }
+    var createMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = { topBar(stringResource(R.string.destination_guests)) },
+        floatingActionButton = {
+            if (canCreate) {
+                Box {
+                    ExtendedFloatingActionButton(
+                        onClick = { createMenu = true },
+                        text = { Text(stringResource(R.string.action_create_guest)) },
+                        icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                    )
+                    DropdownMenu(expanded = createMenu, onDismissRequest = { createMenu = false }) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.create_vm_title)) }, onClick = {
+                            createMenu = false
+                            onCreate(ResourceKind.Qemu)
+                        })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.create_ct_title)) }, onClick = {
+                            createMenu = false
+                            onCreate(ResourceKind.Lxc)
+                        })
+                    }
+                }
+            }
+        },
     ) { innerPadding ->
         if (guests.isEmpty()) {
             MessageWithAction(

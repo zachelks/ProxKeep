@@ -81,7 +81,10 @@ class DataLoadingTest {
             withTimeout(TIMEOUT_MS) { cluster.state.first { it is ClusterState.Loaded } }
 
             repository.saveAndActivate(second.profile, ApiTokenCredentials(second.profile.principal, "secret"))
-            withTimeout(TIMEOUT_MS) { cluster.state.first { (it as? ClusterState.Loaded)?.profileId == second.profile.id } }
+            // The watcher records states on its own thread, so wait until it has the second server's too.
+            withTimeout(TIMEOUT_MS) {
+                while (seen.none { (it as? ClusterState.Loaded)?.profileId == second.profile.id }) delay(10)
+            }
             watcher.cancel()
 
             val lastFirst = seen.indexOfLast { (it as? ClusterState.Loaded)?.profileId == fixture.profile.id }

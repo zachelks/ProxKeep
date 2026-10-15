@@ -10,6 +10,7 @@ import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSession
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509KeyManager
 import javax.net.ssl.X509TrustManager
 
 /**
@@ -29,17 +30,20 @@ import javax.net.ssl.X509TrustManager
  *
  * @param pinnedSha256 a fingerprint in [Fingerprints] form, or null for none
  * @param platformTrust the trust manager used for case 1
+ * @param clientKey presents a client certificate when the server asks for
+ *   one, for example a reverse proxy that requires them
  */
 class ServerTrust(
     pinnedSha256: String? = null,
     platformTrust: X509TrustManager = platformTrustManager(),
+    clientKey: X509KeyManager? = null,
 ) {
     private val pin: String? = pinnedSha256?.let { Fingerprints.normalize(it) }
 
     val trustManager: X509TrustManager = PinningTrustManager(platformTrust)
 
     val socketFactory: SSLSocketFactory = SSLContext.getInstance("TLS")
-        .apply { init(null, arrayOf(trustManager), null) }
+        .apply { init(clientKey?.let { arrayOf(it) }, arrayOf(trustManager), null) }
         .socketFactory
 
     /** The certificate the server presented on the most recent handshake, trusted or not. */

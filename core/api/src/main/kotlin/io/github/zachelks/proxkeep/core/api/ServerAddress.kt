@@ -3,7 +3,7 @@ package io.github.zachelks.proxkeep.core.api
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** Host and port of a Proxmox VE server. The API is always served over HTTPS. */
+/** Host and port of a Proxmox server. The API is always served over HTTPS. */
 data class ServerAddress(
     val host: String,
     val port: Int = DEFAULT_PORT,
@@ -30,15 +30,17 @@ data class ServerAddress(
          * Parses what a person types into a server field: a host name or IP
          * address, optionally with a port, a scheme or a trailing path.
          * Returns null when the text is not a usable address.
+         *
+         * @param defaultPort the port when the text names none, which depends on the product
          */
-        fun parse(input: String): ServerAddress? {
+        fun parse(input: String, defaultPort: Int = DEFAULT_PORT): ServerAddress? {
             var text = input.trim()
             val schemeEnd = text.indexOf("://")
             if (schemeEnd >= 0) text = text.substring(schemeEnd + 3)
             val authority = text.substringBefore('/').substringBefore('?').substringBefore('#')
             if (authority.isEmpty() || authority.contains('@') || authority.contains(' ')) return null
             val url = "https://$authority/".toHttpUrlOrNull() ?: return null
-            val port = if (explicitPort.containsMatchIn(authority)) url.port else DEFAULT_PORT
+            val port = if (explicitPort.containsMatchIn(authority)) url.port else defaultPort
             return ServerAddress(url.host, port)
         }
     }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.PveApiException
+import io.github.zachelks.proxkeep.core.api.SchemaUnavailableException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
@@ -27,6 +28,7 @@ fun UiMessage.text(): String {
 }
 
 fun Throwable.toUiMessage(): UiMessage = when (this) {
+    is SchemaUnavailableException -> UiMessage(R.string.error_schema_unavailable)
     is PveApiException -> when {
         isAuthenticationFailure -> UiMessage(R.string.error_sign_in_rejected)
         isPermissionDenied -> UiMessage(R.string.error_permission_denied, statusMessage)

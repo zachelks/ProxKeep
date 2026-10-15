@@ -2,9 +2,11 @@ package io.github.zachelks.proxkeep.ui.addserver
 
 import io.github.zachelks.proxkeep.MainDispatcherRule
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.data.AuthMethod
+import io.github.zachelks.proxkeep.data.HttpHeader
 import io.github.zachelks.proxkeep.data.MemoryProfileStorage
 import io.github.zachelks.proxkeep.data.PinnedServer
 import io.github.zachelks.proxkeep.data.PlainSecrets
@@ -63,6 +65,59 @@ class AddServerStateTest {
     }
 
     @Test
+    fun reverseProxyHeadersAreSentFromTheFirstContactAndSaved(): Unit = runBlocking {
+        fixture.route("/version", """{"data":{"version":"9.2.1"}}""")
+        fixture.route("/access/domains", """{"data":$REALMS}""")
+        val state = newServer()
+        state.host = address
+        state.addHeader()
+        state.setHeader(0, HttpHeader(" X-Proxy-Token ", " abc "))
+        state.addHeader()
+        state.submitAddress()
+        state.awaitIdle()
+        state.trustCertificate()
+        state.awaitIdle()
+
+        state.method = AuthMethod.ApiToken
+        state.tokenId = "root@pam!app"
+        state.tokenSecret = "s3cret"
+        state.submitSignIn()
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        assertEquals("abc", fixture.server.takeRequest().getHeader("X-Proxy-Token"), "the realm list")
+        assertEquals("abc", fixture.server.takeRequest().getHeader("X-Proxy-Token"), "the token check")
+        assertEquals(listOf(HttpHeader("X-Proxy-Token", "abc")), repository.savedHeaders(storage.read().profiles.single()))
+        assertEquals(emptyList(), state.headers, "header values are not kept once saved")
+    }
+
+    @Test
+    fun anInvalidHeaderIsRefusedAtOnce() {
+        val state = newServer()
+        state.host = address
+        state.addHeader()
+        state.setHeader(0, HttpHeader("Bad Name", "x"))
+
+        state.submitAddress()
+
+        assertEquals(UiMessage(R.string.error_invalid_header), state.error)
+        assertFalse(state.busy)
+    }
+
+    @Test
+    fun aClientCertificateThatIsGoneIsReported(): Unit = runBlocking {
+        val state = newServer()
+        state.host = address
+        state.clientCertAlias = "removed"
+
+        state.submitAddress()
+        state.awaitIdle()
+
+        assertEquals(UiMessage(R.string.error_client_certificate_unavailable), state.error)
+        assertEquals(AddServerState.Step.Address, state.step)
+    }
+
+    @Test
     fun anInvalidAddressIsRefusedAtOnce() {
         val state = newServer()
 
@@ -93,6 +148,35 @@ class AddServerStateTest {
         assertEquals("root@pam!app", saved.principal)
         assertEquals(fixture.server.hostName, saved.name, "an unnamed server is named after its host")
         assertEquals(saved.id, assertIs<Session.Active>(repository.session.value).profile.id)
+    }
+
+    @Test
+    fun aBackupServerIsSavedAsOne(): Unit = runBlocking {
+        val authorizations = mutableListOf<String?>()
+        fixture.route("/version") { request ->
+            authorizations += request.getHeader("Authorization")
+            response("""{"data":{"version":"4.2"}}""")
+        }
+        fixture.route("/access/domains", """{"data":$REALMS}""")
+        val state = newServer()
+        repository.loaded.first { it }
+        state.product = Product.Pbs
+        state.host = address
+        state.submitAddress()
+        state.awaitIdle()
+        state.trustCertificate()
+        state.awaitIdle()
+
+        state.method = AuthMethod.ApiToken
+        state.tokenId = "root@pam!app"
+        state.tokenSecret = "s3cret"
+        state.submitSignIn()
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        assertEquals(Product.Pbs, storage.read().profiles.single().product)
+        assertEquals("PBSAPIToken=root@pam!app:s3cret", authorizations.last())
+        assertEquals(Product.Pbs, assertIs<Session.Active>(repository.session.value).client.product)
     }
 
     @Test
@@ -154,6 +238,85 @@ class AddServerStateTest {
         assertEquals(TicketCredentials("root@pam", TICKET, "csrf"), session.client.credentials)
         assertEquals("lab", session.profile.name, "an unnamed server is named after its cluster")
         assertNull(storage.read().profiles.single().encryptedSecret, "passwords and tickets are never stored")
+    }
+
+    @Test
+    fun aPasswordIsSavedWhenThePersonAsks(): Unit = runBlocking {
+        fixture.route("/access/ticket", """{"data":{"username":"root@pam","ticket":"$TICKET","CSRFPreventionToken":"csrf"}}""")
+        val state = trustedAtSignIn()
+
+        state.username = "root"
+        state.password = "password"
+        state.savePassword = true
+        state.submitSignIn()
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        assertEquals("password", repository.savedPassword(storage.read().profiles.single()))
+    }
+
+    @Test
+    fun aSavedPasswordIsFilledInWhenSigningInAgain(): Unit = runBlocking {
+        fixture.route("/access/domains", """{"data":$REALMS}""")
+        fixture.route("/access/ticket", """{"data":{"username":"root@pam","ticket":"$TOTP_CHALLENGE"}}""")
+        val saved = fixture.profile.copy(authMethod = AuthMethod.Password, principal = "root@pam", encryptedPassword = "plain:pw")
+        storage.write(StoredServers(listOf(saved), saved.id))
+
+        val viewModel = AddServerViewModel(startedRepository(), saved.id)
+        viewModel.state.awaitIdle()
+
+        assertEquals("pw", viewModel.state.password)
+        assertTrue(viewModel.state.savePassword)
+    }
+
+    @Test
+    fun theServersOwnPageCanSignIn(): Unit = runBlocking {
+        fixture.route("/access/ticket") { request ->
+            val form = request.body.readUtf8()
+            assertTrue("password=PVE%3Aalice%40oidc%3Aweb" in form, form)
+            response("""{"data":{"username":"alice@oidc","ticket":"PVE:alice@oidc:renewed","CSRFPreventionToken":"csrf"}}""")
+        }
+        val state = trustedAtSignIn(realms = """[{"realm":"pam","type":"pam"},{"realm":"oidc","type":"openid"}]""")
+        assertTrue(state.hasWebRealms)
+
+        state.method = AuthMethod.Web
+        state.submitSignIn()
+        assertEquals(AddServerState.Step.WebSignIn, state.step)
+        assertEquals("https://$address/", state.webSignInUrl)
+        assertEquals(fixture.fingerprint, state.pinnedFingerprint)
+
+        state.completeWebSignIn("PVE:alice@oidc:web")
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.Done, state.step)
+        val session = assertIs<Session.Active>(repository.session.value)
+        assertEquals(TicketCredentials("alice@oidc", "PVE:alice@oidc:renewed", "csrf"), session.client.credentials)
+        assertEquals(AuthMethod.Web, session.profile.authMethod)
+    }
+
+    @Test
+    fun aPageSessionTheServerRefusesReturnsToSignIn(): Unit = runBlocking {
+        fixture.route("/access/ticket", """{"data":null}""", code = 401)
+        val state = trustedAtSignIn()
+        state.method = AuthMethod.Web
+        state.submitSignIn()
+
+        state.completeWebSignIn("PVE:alice@oidc:expired")
+        state.awaitIdle()
+
+        assertEquals(AddServerState.Step.SignIn, state.step)
+        assertEquals(UiMessage(R.string.error_sign_in_rejected), state.error)
+    }
+
+    @Test
+    fun backFromThePageReturnsToSignIn(): Unit = runBlocking {
+        val state = trustedAtSignIn()
+        state.method = AuthMethod.Web
+        state.submitSignIn()
+
+        assertTrue(state.back())
+
+        assertEquals(AddServerState.Step.SignIn, state.step)
     }
 
     @Test

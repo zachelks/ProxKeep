@@ -27,6 +27,15 @@ class GuestActionTextTest {
     }
 
     @Test
+    fun aShutdownTheServerGaveUpOnSaysItMayStillHappen() {
+        val message = ActionEvent(GuestAction.Shutdown, "web", succeeded = false, detail = "VM quit/powerdown failed - got timeout").message(resources)
+        assertEquals(resources.getString(R.string.action_graceful_timed_out, "web"), message)
+        // A forceful action that times out is a plain failure.
+        val stop = ActionEvent(GuestAction.Stop, "web", succeeded = false, detail = "got timeout").message(resources)
+        assertTrue(stop.endsWith("got timeout"))
+    }
+
+    @Test
     fun aFailureAddsTheServersReason() {
         val message = ActionEvent(GuestAction.Stop, "web", succeeded = false, detail = "  VM 100 is locked (backup)\n").message(resources)
 

@@ -1,8 +1,10 @@
 package io.github.zachelks.proxkeep.ui.tasks
 
+import android.content.res.Resources
 import android.text.format.DateUtils
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.core.api.model.TaskSummary
@@ -48,6 +50,17 @@ private val titlesWithSubject = mapOf(
     "srvrestart" to R.string.task_srvrestart,
     "srvreload" to R.string.task_srvreload,
     "download" to R.string.task_download,
+    // Backup Server tasks name the datastore or job they act on.
+    "garbage_collection" to R.string.task_pbs_gc,
+    "verify" to R.string.task_pbs_verify,
+    "verify_snapshot" to R.string.task_pbs_verify,
+    "verify_group" to R.string.task_pbs_verify,
+    "verificationjob" to R.string.task_pbs_verify_job,
+    "prune" to R.string.task_pbs_prune,
+    "prunejob" to R.string.task_pbs_prune_job,
+    "syncjob" to R.string.task_pbs_sync_job,
+    "backup" to R.string.task_pbs_backup,
+    "reader" to R.string.task_pbs_reader,
 )
 
 /** Task types that act on the node or cluster as a whole. */
@@ -58,17 +71,25 @@ private val titlesWithoutSubject = mapOf(
     "aptupdate" to R.string.task_aptupdate,
 )
 
+private val escaped = Regex("\\\\x([0-9a-fA-F]{2})")
+
+/** A Backup Server escapes characters such as `/` in task IDs the way systemd does, as `\x2f`. */
+fun unescapeTaskId(id: String): String = escaped.replace(id) { it.groupValues[1].toInt(16).toChar().toString() }
+
 /** A readable title for a task, falling back to the server's own type name. */
 @Composable
-fun taskTitle(type: String, id: String?): String {
-    val subject = id?.takeIf { it.isNotBlank() }
+fun taskTitle(type: String, id: String?): String = taskTitle(LocalResources.current, type, id)
+
+/** A readable title for a task, outside of Compose, as for a notification. */
+fun taskTitle(resources: Resources, type: String, id: String?): String {
+    val subject = id?.takeIf { it.isNotBlank() }?.let(::unescapeTaskId)
     val withoutSubject = titlesWithoutSubject[type]
     val withSubject = titlesWithSubject[type]
     return when {
-        type == "vzdump" && subject != null -> stringResource(R.string.task_vzdump, subject)
-        type == "vzdump" -> stringResource(R.string.task_vzdump_job)
-        withoutSubject != null -> stringResource(withoutSubject)
-        withSubject != null && subject != null -> stringResource(withSubject, subject)
+        type == "vzdump" && subject != null -> resources.getString(R.string.task_vzdump, subject)
+        type == "vzdump" -> resources.getString(R.string.task_vzdump_job)
+        withoutSubject != null -> resources.getString(withoutSubject)
+        withSubject != null && subject != null -> resources.getString(withSubject, subject)
         else -> listOfNotNull(type, subject).joinToString(" ")
     }
 }
