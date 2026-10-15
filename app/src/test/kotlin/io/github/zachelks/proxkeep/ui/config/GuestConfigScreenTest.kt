@@ -51,7 +51,7 @@ class GuestConfigScreenTest {
     fun setUp(): Unit = runBlocking {
         fixture.route("/cluster/resources", """{"data":[{"id":"lxc/200","type":"lxc","node":"pve1","vmid":200,"name":"proxy","status":"running"}]}""")
         fixture.route("/version", """{"data":{"version":"9.0.3"}}""")
-        fixture.route("/pve-docs/api-viewer/apidata.js", "", code = 404)
+        fixture.route("/pve-docs/api-viewer/apidoc.js", "", code = 404)
         fixture.route("/nodes/pve1/lxc/200/pending", """{"data":[{"key":"memory","value":1024,"pending":2048}]}""")
         fixture.route("/nodes/pve1/lxc/200/config") { request ->
             if (request.method == "PUT") {

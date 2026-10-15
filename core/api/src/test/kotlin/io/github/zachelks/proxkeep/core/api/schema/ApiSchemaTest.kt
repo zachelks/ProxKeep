@@ -25,6 +25,15 @@ class ApiSchemaTest {
     }
 
     @Test
+    fun theViewersCodeAfterTheSchemaIsLeftOut() {
+        // The server publishes the schema and the viewer in one script, apidoc.js.
+        val script = """const apiSchema = [{"path":"/version","info":{"GET":{"method":"GET","description":"a ] in [ text"}}}];
+
+Ext.define('PVE.APIViewer', { items: [ { xtype: 'treepanel' } ] });"""
+        assertEquals(setOf("/version"), ApiSchema.parse(script).paths)
+    }
+
+    @Test
     fun readsPlainJsonToo() {
         val plain = ApiSchema.parse("""[{"path":"/version","info":{"GET":{"method":"GET"}}}]""")
         assertNotNull(plain.method("/version", "GET"))

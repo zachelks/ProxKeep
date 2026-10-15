@@ -92,7 +92,7 @@ class ConsoleManagerTest {
     fun selectingPutsAnotherConsoleOnScreen() {
         manager.open(shell, title = "pve1")
         val first = assertNotNull(manager.current.value)
-        manager.open(shell, title = "pve1")
+        manager.open(ConsoleTarget.NodeShell("pve2"), title = "pve2")
 
         manager.select(first)
 
@@ -125,9 +125,9 @@ class ConsoleManagerTest {
 
     @Test
     fun closingEndsTheConsoleAndShowsTheOneBesideIt() {
-        manager.open(shell, title = "a")
-        manager.open(shell, title = "b")
-        manager.open(shell, title = "c")
+        manager.open(ConsoleTarget.NodeShell("a"), title = "a")
+        manager.open(ConsoleTarget.NodeShell("b"), title = "b")
+        manager.open(ConsoleTarget.NodeShell("c"), title = "c")
         val middle = manager.sessions.value[1]
         manager.select(middle)
 
@@ -151,7 +151,7 @@ class ConsoleManagerTest {
     @Test
     fun signingOutClosesEveryConsole(): Unit = runBlocking {
         manager.open(shell, title = "pve1")
-        manager.open(shell, title = "pve1")
+        manager.open(ConsoleTarget.NodeShell("pve2"), title = "pve2")
         val opened = manager.sessions.value
 
         repository.signOut()
@@ -163,13 +163,28 @@ class ConsoleManagerTest {
 
     @Test
     fun consolesWithTheSameTitleAreNumbered() {
+        // Two guests on different nodes can share a name.
+        manager.open(ConsoleTarget.Guest("pve1", ResourceKind.Lxc, 200), title = "web")
         manager.open(shell, title = "pve1")
-        manager.open(ConsoleTarget.Guest("pve1", ResourceKind.Qemu, 100), title = "web")
-        manager.open(shell, title = "pve1")
+        manager.open(ConsoleTarget.Guest("pve2", ResourceKind.Lxc, 201), title = "web")
 
         val labels = io.github.zachelks.proxkeep.ui.console.sessionLabels(manager.sessions.value)
 
-        assertEquals(listOf("pve1 (1)", "web", "pve1 (2)"), manager.sessions.value.map { labels[it] })
+        assertEquals(listOf("web (1)", "pve1", "web (2)"), manager.sessions.value.map { labels[it] })
+    }
+
+    @Test
+    fun openingAConsoleAgainReturnsToTheOneStillOpen() {
+        // This node's console is still connecting, so it counts as open.
+        val waiting = ConsoleTarget.NodeShell("pve3")
+        manager.open(waiting, title = "pve3")
+        val first = assertNotNull(manager.current.value)
+        manager.open(ConsoleTarget.Guest("pve1", ResourceKind.Qemu, 100), title = "web")
+
+        manager.open(waiting, title = "pve3")
+
+        assertSame(first, manager.current.value, "a second shell would start a second task on the server")
+        assertEquals(2, manager.sessions.value.size)
     }
 
     @Test

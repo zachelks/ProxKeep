@@ -204,6 +204,7 @@
     <string name="confirm_shutdown_body">The guest is asked to shut down cleanly. Anything it is serving becomes unavailable.</string>
     <string name="confirm_reboot_title">Reboot %1$s?</string>
     <string name="confirm_reboot_body">The guest is asked to shut down cleanly and then starts again.</string>
+    <string name="action_graceful_timed_out">%1$s did not finish in the time the server allows. It may still be shutting down, or it may not answer shutdown requests, for example while an installer runs. Refresh in a moment, or stop it to switch it off at once.</string>
     <string name="confirm_stop_title">Stop %1$s now?</string>
     <string name="confirm_stop_body">The guest is switched off at once, like pulling the power cord. Unsaved data inside it may be lost.</string>
     <string name="confirm_reset_title">Reset %1$s now?</string>
@@ -314,6 +315,10 @@
     <string name="lock_timeout_5_minutes">After 5 minutes</string>
     <string name="lock_timeout_15_minutes">After 15 minutes</string>
     <string name="settings_about">About</string>
+    <string name="crash_title">The app stopped last time</string>
+    <string name="crash_summary">Tap to share the error report, so the problem can be fixed. It holds no passwords, but it may name your server.</string>
+    <string name="crash_share">Share the error report</string>
+    <string name="crash_clear">Clear</string>
     <string name="about_version">Version</string>
     <string name="about_license">License and source code</string>
     <string name="about_license_summary">GNU General Public License, version 3. Tap to open the source code on GitHub.</string>
@@ -434,6 +439,10 @@
     <string name="action_open_display">Open display</string>
     <string name="action_return_to_display">Return to the open display</string>
     <string name="desktop_description">Display of %1$s</string>
+    <string name="desktop_problem_unsupported">The display uses a version or sign-in this app does not support.</string>
+    <string name="desktop_problem_damaged">The display sent data this app cannot read.</string>
+    <string name="desktop_problem_too_large">The display is larger than this app can show. Lower the guest\'s screen resolution and reconnect.</string>
+    <string name="desktop_problem_refused">The display refused the connection.</string>
     <string name="desktop_size">%1$d × %2$d</string>
     <string name="desktop_mode_touch">Touch mode: the pointer goes where you touch. Switch to trackpad mode.</string>
     <string name="desktop_mode_trackpad">Trackpad mode: drag to move the pointer. Switch to touch mode.</string>

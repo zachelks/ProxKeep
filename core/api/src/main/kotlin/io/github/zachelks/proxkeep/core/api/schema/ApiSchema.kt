@@ -176,7 +176,7 @@ data class ApiEndpoint(
  * The server's description of its own API: every path, method and parameter.
  *
  * Proxmox VE publishes it for its API viewer at
- * `/pve-docs/api-viewer/apidata.js`. It matches the server's version exactly,
+ * `/pve-docs/api-viewer/apidoc.js`. It matches the server's version exactly,
  * so forms built from it offer what that server supports.
  */
 class ApiSchema(private val endpoints: Map<String, ApiEndpoint>) {

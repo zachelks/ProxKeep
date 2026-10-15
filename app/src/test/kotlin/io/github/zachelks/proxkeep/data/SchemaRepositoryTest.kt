@@ -69,6 +69,6 @@ class SchemaRepositoryTest {
         """const apiSchema = [{"path":"$path","text":"x","leaf":1,"info":{"GET":{"method":"GET","name":"x"}}}];"""
 
     private companion object {
-        const val SCHEMA_PATH = "/pve-docs/api-viewer/apidata.js"
+        const val SCHEMA_PATH = "/pve-docs/api-viewer/apidoc.js"
     }
 }

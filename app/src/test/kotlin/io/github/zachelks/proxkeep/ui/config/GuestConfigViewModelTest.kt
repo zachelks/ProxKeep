@@ -46,7 +46,7 @@ class GuestConfigViewModelTest {
     private fun start() = runBlocking {
         fixture.route("/cluster/resources", """{"data":[{"id":"qemu/100","type":"qemu","node":"pve1","vmid":100,"name":"web","status":"running"}]}""")
         fixture.route("/version", """{"data":{"version":"9.0.3"}}""")
-        fixture.route("/pve-docs/api-viewer/apidata.js", SCHEMA)
+        fixture.route("/pve-docs/api-viewer/apidoc.js", SCHEMA)
         fixture.route("/nodes/pve1/qemu/100/pending", """{"data":[{"key":"cores","value":2,"pending":4}]}""")
         fixture.route("/nodes/pve1/qemu/100/config") { request ->
             if (request.method == "POST") {
@@ -158,7 +158,7 @@ class GuestConfigViewModelTest {
         fixture.route("/cluster/resources", """{"data":[{"id":"qemu/100","type":"qemu","node":"pve1","vmid":100,"name":"web","status":"running"}]}""")
         runBlocking {
             fixture.route("/version", """{"data":{"version":"9.0.3"}}""")
-            fixture.route("/pve-docs/api-viewer/apidata.js", "Not found", code = 404)
+            fixture.route("/pve-docs/api-viewer/apidoc.js", "Not found", code = 404)
             fixture.route("/nodes/pve1/qemu/100/pending", """{"data":[]}""")
             fixture.route("/nodes/pve1/qemu/100/config", """{"data":$config}""")
             val repository = fixture.signedInRepository(scope)

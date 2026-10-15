@@ -18,13 +18,13 @@ enum class Product(
     val schemaPath: String,
 ) {
     /** Proxmox Virtual Environment. */
-    Pve("PVE", "PVEAuthCookie", "PVEAPIToken", '=', 8006, "../../pve-docs/api-viewer/apidata.js"),
+    Pve("PVE", "PVEAuthCookie", "PVEAPIToken", '=', 8006, "../../pve-docs/api-viewer/apidoc.js"),
 
     /** Proxmox Backup Server. */
-    Pbs("PBS", "PBSAuthCookie", "PBSAPIToken", ':', 8007, "../../docs/api-viewer/apidata.js"),
+    Pbs("PBS", "PBSAuthCookie", "PBSAPIToken", ':', 8007, "../../docs/api-viewer/apidoc.js"),
 
     /** Proxmox Datacenter Manager. */
-    Pdm("PDM", "PDMAuthCookie", "PDMAPIToken", ':', 8443, "../../docs/api-viewer/apidata.js"),
+    Pdm("PDM", "PDMAuthCookie", "PDMAPIToken", ':', 8443, "../../docs/api-viewer/apidoc.js"),
     ;
 
     /** The `Authorization` header value for an API token. */

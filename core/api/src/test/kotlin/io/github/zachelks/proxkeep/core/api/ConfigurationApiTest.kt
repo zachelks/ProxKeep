@@ -129,7 +129,7 @@ class ConfigurationApiTest {
         enqueue(javaClass.getResource("/apidata-excerpt.js")!!.readText())
         val schema = ApiSchema.parse(client.apiSchemaText())
         val request = server.takeRequest()
-        assertEquals("/pve-docs/api-viewer/apidata.js", request.path)
+        assertEquals("/pve-docs/api-viewer/apidoc.js", request.path)
         assertNotNull(schema.method("/nodes/{node}/qemu/{vmid}/config", "POST"))
     }
 

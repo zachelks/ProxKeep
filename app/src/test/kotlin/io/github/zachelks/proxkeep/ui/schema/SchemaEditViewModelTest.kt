@@ -38,7 +38,7 @@ class SchemaEditViewModelTest {
 
     private fun start(request: SchemaEditRequest) = runBlocking {
         fixture.route("/version", """{"data":{"version":"9.0.3"}}""")
-        fixture.route("/pve-docs/api-viewer/apidata.js", SCHEMA)
+        fixture.route("/pve-docs/api-viewer/apidoc.js", SCHEMA)
         fixture.route("/nodes/pve1/network/vmbr0") { request ->
             if (request.method == "GET") {
                 response("""{"data":{"iface":"vmbr0","type":"bridge","autostart":1,"cidr":"192.0.2.10/24","bridge_ports":"eno1","comments":"uplink","families":["inet"],"digest":"d9"}}""")

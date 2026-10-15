@@ -59,16 +59,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.terminal.KeyHandler
 import com.termux.view.TerminalView
 import io.github.zachelks.proxkeep.R
-import io.github.zachelks.proxkeep.data.DEFAULT_TEXT_SIZE_SP
-import io.github.zachelks.proxkeep.data.TERMINAL_TEXT_SIZES_SP
-import kotlinx.coroutines.launch
 import io.github.zachelks.proxkeep.console.ConsoleSession
 import io.github.zachelks.proxkeep.console.ConsoleState
 import io.github.zachelks.proxkeep.console.KeyAction
 import io.github.zachelks.proxkeep.console.TerminalFont
 import io.github.zachelks.proxkeep.console.TerminalKey
+import io.github.zachelks.proxkeep.console.TerminalPalette
+import io.github.zachelks.proxkeep.data.DEFAULT_TEXT_SIZE_SP
+import io.github.zachelks.proxkeep.data.TERMINAL_TEXT_SIZES_SP
 import io.github.zachelks.proxkeep.ui.components.KeyCap
 import io.github.zachelks.proxkeep.ui.components.ModifierCap
+import kotlinx.coroutines.launch
 
 /**
  * A full-screen terminal: the console on screen, a row of the keys an
@@ -87,6 +88,7 @@ fun TerminalScreen(
     extraKeys: List<TerminalKey> = TerminalKey.DEFAULT_ROW,
     textSizeSp: Int = DEFAULT_TEXT_SIZE_SP,
     font: TerminalFont = TerminalFont.System,
+    palette: TerminalPalette = TerminalPalette.Default,
     onTextSizeChange: (Int) -> Unit = {},
 ) {
     val state by console.state.collectAsStateWithLifecycle()
@@ -218,6 +220,9 @@ fun TerminalScreen(
                 AndroidView(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     update = { view ->
+                        // Termux paints only the cells whose background differs from the scheme's, and leaves the
+                        // rest to the view, so the view takes the scheme's background, not the app theme's.
+                        view.setBackgroundColor(palette.backgroundColor)
                         // The view's tag holds the typeface it was given last.
                         if (view.tag !== typeface) {
                             view.setTypeface(typeface)

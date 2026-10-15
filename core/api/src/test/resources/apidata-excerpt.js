@@ -1,4 +1,4 @@
-// An excerpt of /pve-docs/api-viewer/apidata.js, in the shape Proxmox VE 8 and 9 publish it.
+// The schema at the start of /pve-docs/api-viewer/apidoc.js, cut down, in the shape Proxmox VE 8 and 9 publish it.
 const apiSchema = [
    {
       "children" : [

@@ -3,6 +3,7 @@ package io.github.zachelks.proxkeep.console
 import android.content.Context
 import android.graphics.Typeface
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.toColorInt
 import com.termux.terminal.TerminalColors
 import io.github.zachelks.proxkeep.R
 import java.util.Properties
@@ -73,6 +74,10 @@ enum class TerminalPalette(val background: String, val foreground: String, val a
         ),
     ),
     ;
+
+    /** [background] as a color int. */
+    val backgroundColor: Int
+        get() = background.toColorInt()
 
     /** Makes this the colors of every terminal, including those already open once [ConsoleManager.refreshColors] runs. */
     fun applyToTerminals() {

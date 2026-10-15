@@ -45,9 +45,18 @@ class ConsoleManager(
         }
     }
 
-    /** Opens a console and puts it on screen. Consoles already open keep running. */
+    /**
+     * Puts a console for [target] on screen: the one already open, if it is
+     * still connected, so opening a shell twice does not start a second one
+     * on the server. Otherwise a new console starts. Consoles already open
+     * keep running.
+     */
     fun open(target: ConsoleTarget, title: String) {
         if (repository.session.value !is Session.Active) return
+        _sessions.value.firstOrNull { it.target == target && it.state.value !is ConsoleState.Closed }?.let { open ->
+            _current.value = open
+            return
+        }
         val session = start(target, title)
         _sessions.value = _sessions.value + session
         _current.value = session

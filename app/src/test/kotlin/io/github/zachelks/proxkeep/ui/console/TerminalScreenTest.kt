@@ -1,6 +1,7 @@
 package io.github.zachelks.proxkeep.ui.console
 
 import android.content.Context
+import android.graphics.drawable.ColorDrawable
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -12,6 +13,7 @@ import androidx.test.core.app.ApplicationProvider
 import io.github.zachelks.proxkeep.R
 import io.github.zachelks.proxkeep.console.ConsoleSession
 import io.github.zachelks.proxkeep.console.TerminalKey
+import io.github.zachelks.proxkeep.console.TerminalPalette
 import io.github.zachelks.proxkeep.core.api.console.ConsoleTarget
 import org.junit.Rule
 import org.junit.runner.RunWith
@@ -20,6 +22,8 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 // The terminal measures its font, which needs real text rendering.
 @RunWith(RobolectricTestRunner::class)
@@ -49,7 +53,17 @@ class TerminalScreenTest {
         compose.onNodeWithText("ESC").assertDoesNotExist()
     }
 
-    private fun show(extraKeys: List<TerminalKey> = TerminalKey.DEFAULT_ROW) {
+    @Test
+    fun theTerminalTakesTheSchemesBackground() {
+        // Termux leaves the default background to the view, so the app theme's would show through.
+        show(palette = TerminalPalette.TangoLight)
+        compose.waitForIdle()
+
+        val background = assertIs<ColorDrawable>(assertNotNull(shell.view).background)
+        assertEquals(TerminalPalette.TangoLight.backgroundColor, background.color)
+    }
+
+    private fun show(extraKeys: List<TerminalKey> = TerminalKey.DEFAULT_ROW, palette: TerminalPalette = TerminalPalette.Default) {
         compose.setContent {
             TerminalScreen(
                 sessions = listOf(shell, other),
@@ -59,6 +73,7 @@ class TerminalScreenTest {
                 onReconnect = { events += "reconnect ${it.title}" },
                 onLeave = { events += "leave" },
                 extraKeys = extraKeys,
+                palette = palette,
             )
         }
     }
