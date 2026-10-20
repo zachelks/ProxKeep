@@ -5,6 +5,7 @@
     <!-- Keeps open consoles connected while the app is in the background. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Backups are off because the app will hold server credentials. -->
@@ -69,6 +70,11 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps terminal sessions to the user's own servers connected while the app is in the background. Runs only while a session is open; the notification ends them." />
         </service>
+
+        <service
+            android:name=".data.TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

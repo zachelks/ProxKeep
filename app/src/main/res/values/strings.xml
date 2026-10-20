@@ -896,6 +896,12 @@
     <string name="storage_checksum_value">Expected checksum</string>
     <string name="storage_uploading">Uploading %1$s: %2$s of %3$s</string>
     <string name="storage_storing">The node is storing %1$s…</string>
+    <string name="transfer_notification_channel">Transfers</string>
+    <string name="transfer_notification_channel_description">Shown while files are put on storages in the background.</string>
+    <plurals name="transfer_notification_title">
+        <item quantity="one">%d transfer under way</item>
+        <item quantity="other">%d transfers under way</item>
+    </plurals>
     <string name="transfer_done">%1$s is on %2$s</string>
     <string name="transfer_failed">Couldn\'t put %1$s on %2$s</string>
     <string name="storage_configure_title">Configure %1$s</string>

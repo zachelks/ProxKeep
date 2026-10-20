@@ -25,6 +25,7 @@ import io.github.zachelks.proxkeep.data.ServerAccessRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.data.StatusSnapshot
 import io.github.zachelks.proxkeep.data.StorageTransfers
+import io.github.zachelks.proxkeep.data.TransferService
 import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.security.AppLock
 import io.github.zachelks.proxkeep.security.Authenticator
@@ -170,6 +171,14 @@ class AppContainer(context: Context) {
                 .distinctUntilChanged()
                 .filter { it }
                 .collect { ConsoleService.start(context.applicationContext) }
+        }
+        // Uploads and downloads do the same, so leaving the app does not cut them off.
+        scope.launch {
+            transfers.transfers
+                .map { it.isNotEmpty() }
+                .distinctUntilChanged()
+                .filter { it }
+                .collect { TransferService.start(context.applicationContext) }
         }
     }
 

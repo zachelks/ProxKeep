@@ -44,8 +44,8 @@ data class TransferEvent(val fileName: String, val storage: String, val succeede
 /**
  * Uploads and downloads onto storages, run at app level so they carry on
  * when the screen that started them closes, like [GuestLifecycle] does for
- * guests. They end with the app's process; a foreground service would keep
- * them going beyond that.
+ * guests. [TransferService] keeps the process alive while any runs, so they
+ * carry on in the background too.
  */
 class StorageTransfers(
     private val servers: ServerRepository,
