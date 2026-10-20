@@ -2,6 +2,8 @@ package io.github.zachelks.proxkeep
 
 import android.app.Application
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.SystemClock
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -49,7 +51,7 @@ class ProxKeepApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        CrashLog(crashLogFile(this)).install()
+        CrashLog(crashLogFile(this), about = { aboutForCrashes(this) }).install()
         container = AppContainer(this)
 
         // The process lifecycle starts and stops with the app as a whole, not
@@ -66,6 +68,16 @@ class ProxKeepApplication : Application() {
 
 /** Where the last crash's report is kept. */
 fun crashLogFile(context: Context): File = File(context.filesDir, "last-crash.txt")
+
+/** The app's version and the device, at the top of a crash report. */
+private fun aboutForCrashes(context: Context): String {
+    val version = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    } catch (e: PackageManager.NameNotFoundException) {
+        null
+    }
+    return "ProxKeep ${version.orEmpty()}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}"
+}
 
 class AppContainer(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
