@@ -23,6 +23,7 @@ import io.github.zachelks.proxkeep.ui.create.CreateGuestScreen
 import io.github.zachelks.proxkeep.ui.datacenter.CephScreen
 import io.github.zachelks.proxkeep.ui.datacenter.CollectionScreen
 import io.github.zachelks.proxkeep.ui.datacenter.DatacenterScreen
+import io.github.zachelks.proxkeep.ui.datacenter.GuestFirewallScreen
 import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.BackupsScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.SnapshotsScreen
@@ -108,6 +109,7 @@ fun AppNavigation() {
                 )
             }
             entry<Route.GuestConfig> { route -> GuestConfigScreen(route.resourceId, onClose = { navigator.close(route) }) }
+            entry<Route.GuestFirewall> { route -> GuestFirewallScreen(route.resourceId, onClose = { navigator.close(route) }, onOpenRoute = navigator::open) }
         },
     )
 }

@@ -43,7 +43,7 @@ import io.github.zachelks.proxkeep.ui.components.RadioChoices
 import io.github.zachelks.proxkeep.ui.text
 
 /** A lifecycle action offered in a guest's menu. */
-enum class LifecycleMenuItem { Configure, Snapshots, Backups, Migrate, Clone, ConvertToTemplate, Delete }
+enum class LifecycleMenuItem { Configure, Snapshots, Backups, Firewall, Migrate, Clone, ConvertToTemplate, Delete }
 
 /** Shows the dialog for [item]; [onDone] closes it. Settings, snapshots and backups have screens of their own instead. */
 @Composable
@@ -64,7 +64,7 @@ fun LifecycleDialog(item: LifecycleMenuItem, guest: ClusterResource, viewModel: 
             onDismiss = onDone,
         )
         LifecycleMenuItem.Delete -> DeleteDialog(guest, name, viewModel, onDone)
-        LifecycleMenuItem.Configure, LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups -> onDone()
+        LifecycleMenuItem.Configure, LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups, LifecycleMenuItem.Firewall -> onDone()
     }
 }
 
@@ -250,6 +250,7 @@ fun availableLifecycleItems(guest: ClusterResource, allows: (String) -> Boolean,
     if (allows(Privilege.VM_AUDIT)) add(LifecycleMenuItem.Configure)
     if (!template && (allows(Privilege.VM_SNAPSHOT) || allows(Privilege.VM_SNAPSHOT_ROLLBACK))) add(LifecycleMenuItem.Snapshots)
     if (allows(Privilege.VM_BACKUP)) add(LifecycleMenuItem.Backups)
+    if (allows(Privilege.VM_AUDIT)) add(LifecycleMenuItem.Firewall)
     if (onlineNodes > 1 && allows(Privilege.VM_MIGRATE)) add(LifecycleMenuItem.Migrate)
     if (allows(Privilege.VM_CLONE)) add(LifecycleMenuItem.Clone)
     if (!template && guest.status == "stopped" && allows(Privilege.VM_ALLOCATE)) add(LifecycleMenuItem.ConvertToTemplate)
@@ -261,6 +262,7 @@ val LifecycleMenuItem.label: Int
         LifecycleMenuItem.Configure -> R.string.action_configure
         LifecycleMenuItem.Snapshots -> R.string.action_snapshots
         LifecycleMenuItem.Backups -> R.string.action_backups
+        LifecycleMenuItem.Firewall -> R.string.action_firewall
         LifecycleMenuItem.Migrate -> R.string.action_migrate
         LifecycleMenuItem.Clone -> R.string.action_clone
         LifecycleMenuItem.ConvertToTemplate -> R.string.action_convert_to_template

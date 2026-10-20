@@ -58,4 +58,27 @@ class CollectionsTest {
         assertTrue(DATACENTER_GROUPS.sumOf { availableEntries(null, it).size } > 30, "everything while the schema is unknown")
         assertFalse(shown.any { it is DatacenterEntry.Apply })
     }
+
+    @Test
+    fun aGuestsFirewallHasItsOwnListsUnderItsPath() {
+        val args = mapOf("node" to "pve1", "vmid" to "200")
+        val entries = firewallGroups(FirewallScope.Lxc, args).flatMap { it.entries }
+        val options = entries.first() as DatacenterEntry.Settings
+        assertEquals("/nodes/pve1/lxc/200/firewall/options", options.path)
+        assertEquals("/nodes/{node}/lxc/{vmid}/firewall/options", options.schemaPath)
+
+        val lists = entries.filterIsInstance<DatacenterEntry.Collection>()
+        assertEquals(listOf("lxc-fw-rules", "lxc-fw-aliases", "lxc-fw-ipsets", "lxc-fw-log"), lists.map { it.specId })
+        val rules = Collections.get("lxc-fw-rules")!!
+        assertTrue(rules.positional, "rules are addressed by position")
+        assertEquals("/nodes/pve1/lxc/200/firewall/rules/3", rules.item(lists.first().args(null), "3"))
+        assertEquals("/nodes/pve1/lxc/200/firewall/ipset/office", Collections.get("lxc-fw-ipset-entries")!!.list(args + ("name" to "office")))
+    }
+
+    @Test
+    fun aNodesFirewallHasRulesAndALogOnly() {
+        val lists = firewallGroups(FirewallScope.Node, mapOf("node" to "pve1")).flatMap { it.entries }.filterIsInstance<DatacenterEntry.Collection>()
+        assertEquals(listOf("node-fw-rules", "node-fw-log"), lists.map { it.specId })
+        assertEquals("/nodes/pve1/firewall/log", Collections.get("node-fw-log")!!.list(lists.last().args(null)))
+    }
 }

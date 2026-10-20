@@ -61,6 +61,20 @@ data class CollectionSpec(
     }
 }
 
+/**
+ * Where a firewall applies. Each has its own rules under [base], a schema
+ * template; collection IDs start with [prefix].
+ */
+enum class FirewallScope(val prefix: String, val base: String) {
+    Cluster("fw", "/cluster/firewall"),
+    Node("node-fw", "/nodes/{node}/firewall"),
+    Qemu("qemu-fw", "/nodes/{node}/qemu/{vmid}/firewall"),
+    Lxc("lxc-fw", "/nodes/{node}/lxc/{vmid}/firewall"),
+    ;
+
+    fun specId(list: String): String = "$prefix-$list"
+}
+
 /** Every collection the datacenter screens browse, by ID. */
 object Collections {
 
@@ -105,11 +119,7 @@ object Collections {
             itemPath = "/pools/{poolid}", itemParam = "poolid",
         ),
         // --- Firewall ---------------------------------------------------------
-        CollectionSpec(
-            id = "fw-rules", title = R.string.dc_firewall_rules, listPath = "/cluster/firewall/rules", idKey = "pos",
-            titleKeys = listOf("action", "type"), detailKeys = firewallRuleKeys,
-            itemPath = "/cluster/firewall/rules/{pos}", itemParam = "pos", positional = true,
-        ),
+        // The rules, aliases and IP sets of each firewall come from firewallSpecs below.
         CollectionSpec(
             id = "fw-groups", title = R.string.dc_security_groups, listPath = "/cluster/firewall/groups", idKey = "group",
             titleKeys = listOf("group"), detailKeys = listOf("comment"),
@@ -119,21 +129,6 @@ object Collections {
             id = "fw-group-rules", title = R.string.dc_firewall_rules, listPath = "/cluster/firewall/groups/{group}", idKey = "pos",
             titleKeys = listOf("action", "type"), detailKeys = firewallRuleKeys,
             itemPath = "/cluster/firewall/groups/{group}/{pos}", itemParam = "pos", positional = true,
-        ),
-        CollectionSpec(
-            id = "fw-aliases", title = R.string.dc_aliases, listPath = "/cluster/firewall/aliases", idKey = "name",
-            titleKeys = listOf("name"), detailKeys = listOf("cidr", "comment"),
-            itemPath = "/cluster/firewall/aliases/{name}", itemParam = "name",
-        ),
-        CollectionSpec(
-            id = "fw-ipsets", title = R.string.dc_ipsets, listPath = "/cluster/firewall/ipset", idKey = "name",
-            titleKeys = listOf("name"), detailKeys = listOf("comment"),
-            itemPath = "/cluster/firewall/ipset/{name}", itemParam = "name", child = "fw-ipset-entries", editable = false,
-        ),
-        CollectionSpec(
-            id = "fw-ipset-entries", title = R.string.dc_ipset_entries, listPath = "/cluster/firewall/ipset/{name}", idKey = "cidr",
-            titleKeys = listOf("cidr"), detailKeys = listOf("comment"),
-            itemPath = "/cluster/firewall/ipset/{name}/{cidr}", itemParam = "cidr",
         ),
         // --- High availability ----------------------------------------------
         CollectionSpec(
@@ -219,7 +214,54 @@ object Collections {
             titleKeys = listOf("name"), detailKeys = listOf("comment", "server", "mailto", "url"),
             itemPath = "/cluster/notifications/endpoints/$type/{name}", itemParam = "name",
         )
-    } + backupServerCollections + managerCollections
+    } + FirewallScope.entries.flatMap(::firewallSpecs) + backupServerCollections + managerCollections
+
+    /**
+     * One firewall's rules, aliases, IP sets and log. Every firewall has the
+     * same lists under its own path, except that a node's has no aliases or
+     * IP sets and the cluster's has no log.
+     */
+    private fun firewallSpecs(scope: FirewallScope): List<CollectionSpec> = buildList {
+        val base = scope.base
+        add(
+            CollectionSpec(
+                id = scope.specId("rules"), title = R.string.dc_firewall_rules, listPath = "$base/rules", idKey = "pos",
+                titleKeys = listOf("action", "type"), detailKeys = firewallRuleKeys,
+                itemPath = "$base/rules/{pos}", itemParam = "pos", positional = true,
+            ),
+        )
+        if (scope != FirewallScope.Node) {
+            add(
+                CollectionSpec(
+                    id = scope.specId("aliases"), title = R.string.dc_aliases, listPath = "$base/aliases", idKey = "name",
+                    titleKeys = listOf("name"), detailKeys = listOf("cidr", "comment"),
+                    itemPath = "$base/aliases/{name}", itemParam = "name",
+                ),
+            )
+            add(
+                CollectionSpec(
+                    id = scope.specId("ipsets"), title = R.string.dc_ipsets, listPath = "$base/ipset", idKey = "name",
+                    titleKeys = listOf("name"), detailKeys = listOf("comment"),
+                    itemPath = "$base/ipset/{name}", itemParam = "name", child = scope.specId("ipset-entries"), editable = false,
+                ),
+            )
+            add(
+                CollectionSpec(
+                    id = scope.specId("ipset-entries"), title = R.string.dc_ipset_entries, listPath = "$base/ipset/{name}", idKey = "cidr",
+                    titleKeys = listOf("cidr"), detailKeys = listOf("comment"),
+                    itemPath = "$base/ipset/{name}/{cidr}", itemParam = "cidr",
+                ),
+            )
+        }
+        if (scope != FirewallScope.Cluster) {
+            add(
+                CollectionSpec(
+                    id = scope.specId("log"), title = R.string.fw_log, listPath = "$base/log", idKey = "n",
+                    titleKeys = listOf("t"), canCreate = false, editable = false, deletable = false,
+                ),
+            )
+        }
+    }
 
     private fun endpointTitle(type: String): Int = when (type) {
         "sendmail" -> R.string.dc_endpoint_sendmail

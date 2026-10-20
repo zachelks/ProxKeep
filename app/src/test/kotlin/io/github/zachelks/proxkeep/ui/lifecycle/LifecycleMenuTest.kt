@@ -13,7 +13,7 @@ class LifecycleMenuTest {
     @Test
     fun aRunningGuestCannotBeConvertedButCanBeOfferedForDeletion() {
         assertEquals(
-            listOf(LifecycleMenuItem.Configure, LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups, LifecycleMenuItem.Migrate, LifecycleMenuItem.Clone, LifecycleMenuItem.Delete),
+            listOf(LifecycleMenuItem.Configure, LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups, LifecycleMenuItem.Firewall, LifecycleMenuItem.Migrate, LifecycleMenuItem.Clone, LifecycleMenuItem.Delete),
             availableLifecycleItems(running, everything, onlineNodes = 2),
         )
     }
@@ -23,7 +23,7 @@ class LifecycleMenuTest {
         val items = availableLifecycleItems(running.copy(status = "stopped"), everything, onlineNodes = 1)
 
         assertEquals(
-            listOf(LifecycleMenuItem.Configure, LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups, LifecycleMenuItem.Clone, LifecycleMenuItem.ConvertToTemplate, LifecycleMenuItem.Delete),
+            listOf(LifecycleMenuItem.Configure, LifecycleMenuItem.Snapshots, LifecycleMenuItem.Backups, LifecycleMenuItem.Firewall, LifecycleMenuItem.Clone, LifecycleMenuItem.ConvertToTemplate, LifecycleMenuItem.Delete),
             items,
             "a single node offers no migration",
         )
@@ -34,7 +34,7 @@ class LifecycleMenuTest {
         val template = running.copy(status = "stopped", template = true)
 
         assertEquals(
-            listOf(LifecycleMenuItem.Configure, LifecycleMenuItem.Backups, LifecycleMenuItem.Migrate, LifecycleMenuItem.Clone, LifecycleMenuItem.Delete),
+            listOf(LifecycleMenuItem.Configure, LifecycleMenuItem.Backups, LifecycleMenuItem.Firewall, LifecycleMenuItem.Migrate, LifecycleMenuItem.Clone, LifecycleMenuItem.Delete),
             availableLifecycleItems(template, everything, onlineNodes = 3),
         )
     }

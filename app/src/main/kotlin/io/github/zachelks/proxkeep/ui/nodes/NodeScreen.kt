@@ -61,6 +61,9 @@ import io.github.zachelks.proxkeep.ui.components.CenteredProgress
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.components.StatusLabel
 import io.github.zachelks.proxkeep.ui.components.UsageBar
+import io.github.zachelks.proxkeep.ui.datacenter.FirewallScope
+import io.github.zachelks.proxkeep.ui.datacenter.SectionList
+import io.github.zachelks.proxkeep.ui.datacenter.firewallGroups
 import io.github.zachelks.proxkeep.ui.format.formatBytes
 import io.github.zachelks.proxkeep.ui.format.formatUptime
 import io.github.zachelks.proxkeep.ui.format.usageFraction
@@ -82,14 +85,15 @@ enum class NodeTab(val label: Int) {
     Updates(R.string.node_tab_updates),
     Services(R.string.node_tab_services),
     Network(R.string.node_tab_network),
+    Firewall(R.string.node_tab_firewall),
     System(R.string.node_tab_system),
     Disks(R.string.node_tab_disks),
     Log(R.string.node_tab_log),
 }
 
 /**
- * Everything about one node: status, updates, services, network, DNS and
- * time, certificates, disks and its log.
+ * Everything about one node: status, updates, services, network, firewall,
+ * DNS and time, certificates, disks and its log.
  *
  * @param onConsoleOpened called after a shell has been opened on the node, to show it
  * @param onOpenRoute opens a full screen, such as a form for a network interface
@@ -157,6 +161,7 @@ fun NodeScreen(
                 NodeTab.Updates -> UpdatesTab(viewModel, enabled, canModify = allows(Privilege.SYS_MODIFY), canUpgrade = allows(Privilege.SYS_CONSOLE), onConsoleOpened)
                 NodeTab.Services -> ServicesTab(viewModel, enabled, canManage = allows(Privilege.SYS_MODIFY))
                 NodeTab.Network -> NetworkTab(viewModel, enabled, canModify = allows(Privilege.SYS_MODIFY), onOpenRoute)
+                NodeTab.Firewall -> SectionList(remember(node) { firewallGroups(FirewallScope.Node, mapOf("node" to node)) }, onOpenRoute, snackbar)
                 NodeTab.System -> SystemTab(viewModel, enabled, canModify = allows(Privilege.SYS_MODIFY))
                 NodeTab.Disks -> DisksTab(viewModel)
                 NodeTab.Log -> LogTab(viewModel)

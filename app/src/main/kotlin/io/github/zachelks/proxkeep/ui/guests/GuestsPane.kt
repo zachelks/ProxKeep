@@ -193,6 +193,7 @@ fun GuestsPane(
                                     LifecycleMenuItem.Configure -> onOpenRoute(Route.GuestConfig(selectedId))
                                     LifecycleMenuItem.Snapshots -> onOpenRoute(Route.Snapshots(selectedId))
                                     LifecycleMenuItem.Backups -> onOpenRoute(Route.Backups(selectedId))
+                                    LifecycleMenuItem.Firewall -> onOpenRoute(Route.GuestFirewall(selectedId))
                                     else -> lifecycleDialog = selectedId to item
                                 }
                             },

@@ -65,4 +65,30 @@ class DatacenterFlowTest {
             scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         }
     }
+
+    @Test
+    fun aGuestsFirewallListsItsOwnRules() {
+        fixture.route("/version", """{"data":{"version":"9.0.3","release":"9.0","repoid":"abc"}}""")
+        fixture.route("/pve-docs/api-viewer/apidoc.js", "", code = 404)
+        fixture.route(
+            "/cluster/resources",
+            """{"data":[{"id":"node/pve1","type":"node","node":"pve1","status":"online"},{"id":"lxc/200","type":"lxc","node":"pve1","vmid":200,"name":"dns","status":"running"}]}""",
+        )
+        fixture.route("/cluster/tasks", """{"data":[]}""")
+        fixture.route("/access/permissions", """{"data":{"/":{"VM.Audit":1}}}""")
+        fixture.route("/nodes/pve1/lxc/200/firewall/rules", """{"data":[{"pos":0,"type":"in","action":"DROP","dport":"23","enable":1}],"digest":"d1"}""")
+        val container = (context as ProxKeepApplication).container
+        runBlocking {
+            container.repository.loaded.value
+            container.repository.saveAndActivate(
+                fixture.profile.copy(authMethod = AuthMethod.Password, principal = "root@pam"),
+                TicketCredentials("root@pam", "PVE:root@pam:6712F3A1::c2ln", "csrf"),
+            )
+        }
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        container.pendingNavigation.request(Route.GuestFirewall("lxc/200"))
+        compose.waitWithLooper { compose.onAllNodes(hasText(context.getString(R.string.fw_title, "dns"))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(context.getString(R.string.dc_firewall_rules)).performClick()
+        compose.waitWithLooper { compose.onAllNodes(hasText("DROP", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    }
 }

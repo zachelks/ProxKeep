@@ -531,6 +531,7 @@
     <string name="restore_start_after">Start the guest after restoring</string>
     <string name="action_snapshots">Snapshots</string>
     <string name="action_backups">Backups</string>
+    <string name="action_firewall">Firewall</string>
     <string name="action_migrate">Migrate</string>
     <string name="action_clone">Clone</string>
     <string name="action_convert_to_template">Convert to template</string>
@@ -778,6 +779,7 @@
     <string name="node_tab_updates">Updates</string>
     <string name="node_tab_services">Services</string>
     <string name="node_tab_network">Network</string>
+    <string name="node_tab_firewall">Firewall</string>
     <string name="node_tab_system">DNS and time</string>
     <string name="node_tab_disks">Disks</string>
     <string name="node_tab_log">Log</string>
@@ -998,6 +1000,8 @@
     <string name="dc_group_notifications">Notifications</string>
     <string name="dc_options">Options</string>
     <string name="dc_firewall_options">Firewall options</string>
+    <string name="fw_log">Log</string>
+    <string name="fw_title">Firewall of %1$s</string>
     <string name="dc_firewall_rules">Rules</string>
     <string name="dc_security_groups">Security groups</string>
     <string name="dc_aliases">Aliases</string>

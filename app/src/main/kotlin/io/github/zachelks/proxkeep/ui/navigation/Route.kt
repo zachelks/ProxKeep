@@ -85,6 +85,10 @@ sealed interface Route {
     @Serializable
     data class Collection(val specId: String, val args: Map<String, String> = emptyMap(), val title: String? = null) : Route
 
+    /** A guest's firewall: options, rules, aliases, IP sets and log. */
+    @Serializable
+    data class GuestFirewall(val resourceId: String) : Route
+
     /** The datacenter's sections. */
     @Serializable
     data object Datacenter : Route
