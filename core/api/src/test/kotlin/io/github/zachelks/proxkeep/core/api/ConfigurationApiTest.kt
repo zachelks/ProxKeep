@@ -104,6 +104,24 @@ class ConfigurationApiTest {
     }
 
     @Test
+    fun disksMoveToAnotherStorage(): Unit = runBlocking {
+        enqueue("""{"data":"UPID:pve1:1:2:3:qmmove:100:root@pam:"}""")
+        enqueue("""{"data":"UPID:pve1:1:2:3:move_volume:200:root@pam:"}""")
+
+        client.moveDisk("pve1", ResourceKind.Qemu, 100, "scsi0", "ceph", deleteSource = true)
+        val vm = server.takeRequest()
+        assertEquals("POST", vm.method)
+        assertEquals("/api2/json/nodes/pve1/qemu/100/move_disk", vm.path)
+        assertEquals(mapOf("disk" to "scsi0", "storage" to "ceph", "delete" to "1"), form(vm))
+
+        // A container names its volume and moves it with another call.
+        client.moveDisk("pve1", ResourceKind.Lxc, 200, "rootfs", "local-zfs", deleteSource = false)
+        val ct = server.takeRequest()
+        assertEquals("/api2/json/nodes/pve1/lxc/200/move_volume", ct.path)
+        assertEquals(mapOf("volume" to "rootfs", "storage" to "local-zfs", "delete" to "0"), form(ct))
+    }
+
+    @Test
     fun bridgesAreListed(): Unit = runBlocking {
         enqueue("""{"data":[{"iface":"vmbr1","type":"bridge","active":1},{"iface":"vmbr0","type":"bridge","active":1,"cidr":"192.0.2.10/24"}]}""")
         val bridges = client.nodeNetworks("pve1", type = "any_bridge")

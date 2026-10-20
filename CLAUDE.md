@@ -162,7 +162,7 @@ VNC over the websocket, the third prototype, is built: see milestone 3.
 
 **Milestone 4, Guest lifecycle.** Done in code: snapshots, backup now, restore, migrate, clone, convert to template and delete. Restoring as a new guest and backup jobs come with milestone 6. The first public release follows this milestone; it needs testing against real servers first.
 
-**Milestone 5, Configuration.** Done in code: schema-driven options, hand-designed hardware editing (processor, memory, disks, CD and DVD drives, network devices), cloud-init settings, pending changes, and wizards for new virtual machines and containers. Not yet confirmed against a real server. Moving disks between storages is not done.
+**Milestone 5, Configuration.** Done in code: schema-driven options, hand-designed hardware editing (processor, memory, disks, CD and DVD drives, network devices), cloud-init settings, pending changes, and wizards for new virtual machines and containers. Moving disks and container volumes to another storage is done too. Not yet confirmed against a real server.
 
 **Milestone 6, Nodes, storage and alerts.** Done in code: node management (summary and history, updates with an upgrade console, services, network interfaces, DNS and time, certificates, disks and SMART, the system journal, reboot and shutdown), the storage browser with uploads, downloads from a URL and the template catalog, storage configuration, backup jobs, restoring as a new guest, background alerts, a status widget, a Quick Settings tile and app shortcuts. Not yet confirmed against a real server. Transfers stop if Android ends the app's process; a foreground service would keep them going. The network tab does not show the pending configuration's difference.
 

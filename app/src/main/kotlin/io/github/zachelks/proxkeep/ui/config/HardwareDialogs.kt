@@ -224,6 +224,41 @@ fun ResizeDialog(disk: DiskInfo, onDismiss: () -> Unit, onGrow: (Int) -> Unit) {
     }
 }
 
+/**
+ * Moves a disk to another storage of the guest's node. Only storages that
+ * hold the guest's kind of disk, other than the disk's own, are offered.
+ */
+@Composable
+fun MoveDiskDialog(
+    kind: ResourceKind,
+    disk: DiskInfo,
+    choices: Loadable<HardwareChoices>?,
+    onLoad: () -> Unit,
+    onDismiss: () -> Unit,
+    onMove: (storage: String, deleteSource: Boolean) -> Unit,
+) {
+    var storage by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleteSource by rememberSaveable { mutableStateOf(false) }
+    FormDialog(
+        title = stringResource(R.string.hardware_move_title, disk.key),
+        confirmLabel = stringResource(R.string.action_move),
+        canConfirm = storage != null,
+        onConfirm = { onMove(storage!!, deleteSource) },
+        onDismiss = onDismiss,
+    ) {
+        Text(stringResource(if (kind == ResourceKind.Lxc) R.string.hardware_move_help_ct else R.string.hardware_move_help_vm))
+        WithChoices(choices, onLoad) { value ->
+            val targets = value.diskStorages.map { it.storage }.filter { it != disk.storage }
+            if (targets.isEmpty()) {
+                Text(stringResource(R.string.hardware_move_no_storage))
+            } else {
+                MenuField(stringResource(R.string.hardware_storage), targets, storage, { it }, { storage = it })
+            }
+        }
+        CheckRow(stringResource(R.string.hardware_move_delete), deleteSource) { deleteSource = it }
+    }
+}
+
 /** Chooses the ISO image in a CD drive, or adds a drive when [key] is null. */
 @Composable
 fun CdromDialog(

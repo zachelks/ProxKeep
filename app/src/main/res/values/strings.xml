@@ -680,6 +680,13 @@
     <string name="hardware_add_mount_point">Add mount point</string>
     <string name="hardware_bus">Bus</string>
     <string name="hardware_bus_full">This bus has no free slot. Choose another.</string>
+    <string name="action_move_disk">Move to another storage</string>
+    <string name="action_move">Move</string>
+    <string name="hardware_move_title">Move %1$s</string>
+    <string name="hardware_move_help_vm">The disk is copied while the guest keeps running.</string>
+    <string name="hardware_move_help_ct">The container must be stopped while its volume moves.</string>
+    <string name="hardware_move_no_storage">No other storage on this node holds this kind of disk.</string>
+    <string name="hardware_move_delete">Delete the original afterwards</string>
     <string name="hardware_storage">Storage</string>
     <string name="hardware_storage_free">%1$s (%2$s free)</string>
     <string name="hardware_no_disk_storage">No storage on this node can hold disks.</string>

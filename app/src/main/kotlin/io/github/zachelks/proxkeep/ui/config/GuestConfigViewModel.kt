@@ -202,6 +202,15 @@ class GuestConfigViewModel(
         run { servers.request { it.resizeDisk(settings.node, settings.kind, settings.vmid, disk, "+${addGiB}G") } }
     }
 
+    /**
+     * Moves a disk to another storage. The original is deleted afterwards
+     * only when [deleteSource] says so; otherwise it stays as an unused disk.
+     */
+    fun moveDisk(disk: String, storage: String, deleteSource: Boolean) {
+        val settings = (_settings.value as? Loadable.Loaded)?.value ?: return
+        run { servers.request { it.moveDisk(settings.node, settings.kind, settings.vmid, disk, storage, deleteSource) } }
+    }
+
     /** Writes the cloud-init drive again, so changed settings reach the guest at its next start. */
     fun regenerateCloudInit() {
         val settings = (_settings.value as? Loadable.Loaded)?.value ?: return

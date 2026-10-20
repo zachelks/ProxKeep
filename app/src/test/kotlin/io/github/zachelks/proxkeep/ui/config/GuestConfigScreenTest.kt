@@ -5,6 +5,7 @@ import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -12,12 +13,12 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import io.github.zachelks.proxkeep.R
-import io.github.zachelks.proxkeep.waitWithLooper
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.PinnedServer
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SchemaRepository
 import io.github.zachelks.proxkeep.data.response
+import io.github.zachelks.proxkeep.waitWithLooper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -105,6 +107,39 @@ class GuestConfigScreenTest {
         compose.waitWithLooper { writes.isNotEmpty() }
         assertTrue("cores=4" in writes.single())
         assertTrue("digest=d1" in writes.single())
+    }
+
+    @Test
+    fun aVolumeMovesToAnotherStorage() {
+        fixture.route(
+            "/nodes/pve1/storage",
+            """{"data":[{"storage":"local-lvm","type":"lvmthin","content":"images,rootdir","active":1,"enabled":1},
+               {"storage":"local-zfs","type":"zfspool","content":"images,rootdir","active":1,"enabled":1},
+               {"storage":"local","type":"dir","content":"iso,vztmpl","active":1,"enabled":1}]}""",
+        )
+        fixture.route("/nodes/pve1/network", """{"data":[{"iface":"vmbr0","type":"bridge","active":1}]}""")
+        fixture.route("/nodes/pve1/lxc/200/move_volume") { request ->
+            writes += request.body.readUtf8()
+            response("""{"data":null}""")
+        }
+        compose.setContent { GuestConfigScreen("lxc/200", onClose = {}, viewModel = viewModel) }
+        val cores = context.resources.getQuantityString(R.plurals.hardware_cores_count, 2, 2)
+        compose.waitWithLooper { compose.onAllNodes(hasText(cores)).fetchSemanticsNodes().isNotEmpty() }
+        // The list is longer than the test's screen.
+        val root = string(R.string.hardware_root_disk)
+        scrollTo(root)
+
+        compose.onNodeWithContentDescription(string(R.string.action_more_for, root)).performClick()
+        compose.onNodeWithText(string(R.string.action_move_disk)).performClick()
+        compose.waitWithLooper { compose.onAllNodes(hasText(string(R.string.hardware_storage))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(string(R.string.hardware_storage)).performClick()
+        // The disk's own storage and storages that hold no container volumes are not offered.
+        assertTrue(compose.onAllNodes(hasText("local")).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("local-zfs").performClick()
+        compose.onNodeWithText(string(R.string.action_move)).performClick()
+
+        compose.waitWithLooper { writes.isNotEmpty() }
+        assertEquals("volume=rootfs&storage=local-zfs&delete=0", writes.single())
     }
 
     @Test

@@ -106,6 +106,10 @@ data class DiskInfo(
     val canResize: Boolean
         get() = !isCdrom && !isUnused && !isFirmwareState && sizeBytes != null
 
+    /** A disk on a storage can move to another; a CD drive holds an image, not a disk of its own. */
+    val canMove: Boolean
+        get() = !isCdrom && !isUnused && storage != null
+
     val isEmptyDrive: Boolean
         get() = isCdrom && (volume == "none" || volume.isEmpty())
 }

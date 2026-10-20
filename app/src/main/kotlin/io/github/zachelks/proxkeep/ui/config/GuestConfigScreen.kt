@@ -84,6 +84,7 @@ private sealed interface HardwareEdit {
     data object Memory : HardwareEdit
     data object AddDisk : HardwareEdit
     data class Grow(val disk: DiskInfo) : HardwareEdit
+    data class Move(val disk: DiskInfo) : HardwareEdit
     data class Detach(val disk: DiskInfo) : HardwareEdit
     data class Cdrom(val disk: DiskInfo?) : HardwareEdit
     data class Nic(val nic: NicInfo?) : HardwareEdit
@@ -206,7 +207,14 @@ private fun HardwareTab(settings: GuestSettings, viewModel: GuestConfigViewModel
         }
         section(R.string.hardware_disks)
         items(hardware.disks, key = { it.key }) { disk ->
-            DiskRow(disk, settings, canDisk, onGrow = { edit = HardwareEdit.Grow(disk) }, onDetach = { edit = HardwareEdit.Detach(disk) })
+            DiskRow(
+                disk,
+                settings,
+                canDisk,
+                onGrow = { edit = HardwareEdit.Grow(disk) },
+                onMove = { edit = HardwareEdit.Move(disk) },
+                onDetach = { edit = HardwareEdit.Detach(disk) },
+            )
         }
         item {
             AddButton(stringResource(if (qemu) R.string.hardware_add_disk else R.string.hardware_add_mount_point), canDisk) { edit = HardwareEdit.AddDisk }
@@ -257,6 +265,10 @@ private fun HardwareTab(settings: GuestSettings, viewModel: GuestConfigViewModel
             edit = null
             viewModel.resize(current.disk.key, gib)
         }
+        is HardwareEdit.Move -> MoveDiskDialog(settings.kind, current.disk, choices, viewModel::loadChoices, dismiss) { storage, deleteSource ->
+            edit = null
+            viewModel.moveDisk(current.disk.key, storage, deleteSource)
+        }
         is HardwareEdit.Detach -> {
             val unused = current.disk.isUnused
             ConfirmDialog(
@@ -305,7 +317,7 @@ private fun GuestSettings.isPending(vararg keys: String): Boolean = keys.any { i
 private fun resourcesPlural(id: Int, count: Int): String = pluralStringResource(id, count, count)
 
 @Composable
-private fun DiskRow(disk: DiskInfo, settings: GuestSettings, canEdit: Boolean, onGrow: () -> Unit, onDetach: () -> Unit) {
+private fun DiskRow(disk: DiskInfo, settings: GuestSettings, canEdit: Boolean, onGrow: () -> Unit, onMove: () -> Unit, onDetach: () -> Unit) {
     val title = when {
         disk.isRoot -> stringResource(R.string.hardware_root_disk)
         disk.mountPath != null -> "${disk.mountPath} · ${disk.key}"
@@ -314,6 +326,7 @@ private fun DiskRow(disk: DiskInfo, settings: GuestSettings, canEdit: Boolean, o
     val parts = listOfNotNull(disk.storage, disk.sizeBytes?.let(::formatBytes))
     val menu = buildList {
         if (canEdit && disk.canResize) add(stringResource(R.string.action_grow) to onGrow)
+        if (canEdit && disk.canMove) add(stringResource(R.string.action_move_disk) to onMove)
         if (canEdit && !disk.isRoot && !disk.isFirmwareState) {
             add(stringResource(if (disk.isUnused) R.string.action_destroy else R.string.action_detach) to onDetach)
         }

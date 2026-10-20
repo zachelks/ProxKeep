@@ -228,6 +228,23 @@ class PveClient(
     suspend fun resizeDisk(node: String, kind: ResourceKind, vmid: Int, disk: String, size: String): String? =
         callForTask(put(guestPath(node, kind, vmid) + "resize", mapOf("disk" to disk, "size" to size)))
 
+    /**
+     * Moves a disk to another storage, as a task. A virtual machine's disk
+     * moves while it runs; a container's volume moves only while it is stopped.
+     *
+     * @param disk the disk's key, such as `scsi0` or `rootfs`
+     * @param deleteSource removes the original once copied; otherwise it stays as an unused disk
+     * @return the task's UPID
+     */
+    suspend fun moveDisk(node: String, kind: ResourceKind, vmid: Int, disk: String, storage: String, deleteSource: Boolean): String? {
+        val form = mapOf(
+            (if (kind == ResourceKind.Lxc) "volume" else "disk") to disk,
+            "storage" to storage,
+            "delete" to if (deleteSource) "1" else "0",
+        )
+        return callForTask(post(guestPath(node, kind, vmid) + if (kind == ResourceKind.Lxc) "move_volume" else "move_disk", form))
+    }
+
     /** Writes a virtual machine's cloud-init drive again with its current settings. */
     suspend fun regenerateCloudInit(node: String, vmid: Int) {
         callForTask(put(guestPath(node, ResourceKind.Qemu, vmid) + "cloudinit", emptyMap()))
