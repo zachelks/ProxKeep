@@ -89,6 +89,10 @@ sealed interface Route {
     @Serializable
     data class GuestFirewall(val resourceId: String) : Route
 
+    /** Every user's second factors. */
+    @Serializable
+    data object TwoFactor : Route
+
     /** The datacenter's sections. */
     @Serializable
     data object Datacenter : Route

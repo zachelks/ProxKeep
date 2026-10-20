@@ -1,10 +1,12 @@
 package io.github.zachelks.proxkeep.ui.datacenter
 
 import android.content.Context
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import io.github.zachelks.proxkeep.MainActivity
@@ -58,7 +60,8 @@ class DatacenterFlowTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         for ((label, expected) in listOf(R.string.dc_replication to context.getString(R.string.dc_empty), R.string.dc_users to "root@pam", R.string.dc_groups to "admins")) {
             container.pendingNavigation.request(Route.Datacenter)
-            compose.waitWithLooper { compose.onAllNodes(hasText(context.getString(label))).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitWithLooper { compose.onAllNodes(hasText(context.getString(R.string.dc_group_general))).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNode(hasScrollAction()).performScrollToNode(hasText(context.getString(label)))
             compose.onNodeWithText(context.getString(label)).performClick()
             compose.waitWithLooper { compose.onAllNodes(hasText(expected)).fetchSemanticsNodes().isNotEmpty() }
             scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }

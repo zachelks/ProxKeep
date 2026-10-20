@@ -5,6 +5,7 @@ import io.github.zachelks.proxkeep.core.api.pbs.PBS_NODE
 import io.github.zachelks.proxkeep.ui.datacenter.Collections
 import io.github.zachelks.proxkeep.ui.datacenter.DatacenterEntry
 import io.github.zachelks.proxkeep.ui.datacenter.DatacenterGroup
+import io.github.zachelks.proxkeep.ui.navigation.Route
 
 // Kept apart from the collections themselves, which must be built before these look them up.
 
@@ -28,7 +29,10 @@ val BACKUP_SERVER_GROUPS = listOf(
             entry("pbs-traffic", R.string.pbs_traffic_control),
         ),
     ),
-    DatacenterGroup(R.string.dc_group_access, listOf(entry("pbs-users", R.string.dc_users))),
+    DatacenterGroup(
+        R.string.dc_group_access,
+        listOf(entry("pbs-users", R.string.dc_users), DatacenterEntry.Screen(R.string.tfa_title, Route.TwoFactor, "/access/tfa")),
+    ),
     DatacenterGroup(
         R.string.pbs_group_server,
         listOf(

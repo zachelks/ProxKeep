@@ -80,6 +80,7 @@ val DATACENTER_GROUPS = listOf(
         R.string.dc_group_access,
         listOf(
             collection("users", R.string.dc_users),
+            DatacenterEntry.Screen(R.string.tfa_title, Route.TwoFactor, "/access/tfa"),
             collection("groups", R.string.dc_groups),
             collection("pools", R.string.dc_pools),
             collection("roles", R.string.dc_roles),

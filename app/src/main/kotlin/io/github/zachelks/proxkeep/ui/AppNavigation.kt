@@ -24,6 +24,7 @@ import io.github.zachelks.proxkeep.ui.datacenter.CephScreen
 import io.github.zachelks.proxkeep.ui.datacenter.CollectionScreen
 import io.github.zachelks.proxkeep.ui.datacenter.DatacenterScreen
 import io.github.zachelks.proxkeep.ui.datacenter.GuestFirewallScreen
+import io.github.zachelks.proxkeep.ui.datacenter.TwoFactorScreen
 import io.github.zachelks.proxkeep.ui.desktop.DesktopScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.BackupsScreen
 import io.github.zachelks.proxkeep.ui.lifecycle.SnapshotsScreen
@@ -89,6 +90,7 @@ fun AppNavigation() {
                 )
             }
             entry<Route.Datacenter> { DatacenterScreen(onClose = { navigator.close(Route.Datacenter) }, onOpenRoute = navigator::open) }
+            entry<Route.TwoFactor> { TwoFactorScreen(onClose = { navigator.close(Route.TwoFactor) }) }
             entry<Route.Ceph> { CephScreen(onClose = { navigator.close(Route.Ceph) }, onOpenRoute = navigator::open) }
             entry<Route.Datastore> { route -> DatastoreScreen(route.store, onClose = { navigator.close(route) }, onOpenRoute = navigator::open) }
             entry<Route.BackupGroup> { route ->
