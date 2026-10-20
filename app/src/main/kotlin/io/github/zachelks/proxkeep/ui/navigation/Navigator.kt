@@ -20,6 +20,11 @@ class Navigator(private val backStack: MutableList<Route>) {
         if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
     }
 
+    /** Closes every screen over the main screen. */
+    fun backToMain() {
+        while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+    }
+
     /**
      * Closes [route] wherever it is in the stack. Safe to call more than
      * once, so a screen can close itself from more than one path.

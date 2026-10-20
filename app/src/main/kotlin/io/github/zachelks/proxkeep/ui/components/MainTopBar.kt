@@ -4,6 +4,8 @@ package io.github.zachelks.proxkeep.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.zachelks.proxkeep.R
@@ -29,13 +32,20 @@ import io.github.zachelks.proxkeep.data.StoredServers
 import io.github.zachelks.proxkeep.ui.ShellViewModel
 
 /**
- * The app bar of every top-level screen: a title, a refresh button while
- * signed in, and the server menu.
+ * The app bar of every top-level screen: a title, search and a refresh
+ * button while signed in, a way back to open consoles, and the server menu.
+ *
+ * @param openConsoles how many consoles are running
  */
 @Composable
 fun MainTopBar(
     title: String,
     viewModel: ShellViewModel,
+    openConsoles: Int,
+    onOpenConsoles: () -> Unit,
+    desktopOpen: Boolean,
+    onOpenDesktop: () -> Unit,
+    onSearch: (() -> Unit)?,
     onAddServer: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -45,7 +55,31 @@ fun MainTopBar(
     TopAppBar(
         title = { Text(title) },
         actions = {
-            if (session is Session.Active) {
+            if (desktopOpen) {
+                IconButton(onClick = onOpenDesktop) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_desktop),
+                        contentDescription = stringResource(R.string.action_return_to_display),
+                    )
+                }
+            }
+            if (openConsoles > 0) {
+                IconButton(onClick = onOpenConsoles) {
+                    BadgedBox(badge = { Badge { Text(openConsoles.toString()) } }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_terminal),
+                            contentDescription = pluralStringResource(R.plurals.open_consoles_description, openConsoles, openConsoles),
+                        )
+                    }
+                }
+            }
+            if (session is Session.Active && onSearch != null) {
+                IconButton(onClick = onSearch) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search),
+                        contentDescription = stringResource(R.string.action_search),
+                    )
+                }
                 IconButton(onClick = viewModel::refresh) {
                     Icon(
                         painter = painterResource(R.drawable.ic_refresh),
@@ -83,9 +117,11 @@ private fun ServerMenu(
     val current: ServerProfile? = when (session) {
         is Session.Active -> session.profile
         is Session.SignedOut -> session.profile
+        is Session.SigningIn -> session.profile
         Session.None -> null
     }
-    val canSignOut = session is Session.Active && session.client.credentials is TicketCredentials
+    val canSignOut = session is Session.Active && session.client.credentials is TicketCredentials ||
+        session is Session.SigningIn
 
     // The Box anchors the menu to the button that opens it.
     Box {

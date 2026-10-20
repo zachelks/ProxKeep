@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -8,6 +9,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.zachelks.proxkeep.ui.AppRoot
+import io.github.zachelks.proxkeep.ui.TopLevelDestination
+import io.github.zachelks.proxkeep.ui.navigation.GuestRequest
+import io.github.zachelks.proxkeep.ui.navigation.Route
 import io.github.zachelks.proxkeep.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -17,6 +21,9 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // A recreated activity has handled its intent already.
+        if (savedInstanceState == null) handle(intent)
+
         val settings = (application as ProxKeepApplication).container.settings
         lifecycleScope.launch {
             settings.lockEnabled.collect { enabled -> hideFromRecents(enabled) }
@@ -25,6 +32,25 @@ class MainActivity : FragmentActivity() {
         setContent {
             AppTheme {
                 AppRoot()
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handle(intent)
+    }
+
+    private fun handle(intent: Intent?) {
+        val navigation = (application as ProxKeepApplication).container.pendingNavigation
+        when (intent?.action) {
+            ACTION_OPEN_TERMINAL -> navigation.request(Route.Terminal)
+            ACTION_OPEN_TASKS -> navigation.requestDestination(TopLevelDestination.Tasks)
+            ACTION_OPEN_SEARCH -> navigation.requestSearch()
+            ACTION_OPEN_GUEST -> {
+                val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
+                val resourceId = intent.getStringExtra(EXTRA_RESOURCE_ID)
+                if (profileId != null && resourceId != null) navigation.requestGuest(GuestRequest(profileId, resourceId))
             }
         }
     }
@@ -43,5 +69,21 @@ class MainActivity : FragmentActivity() {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
+    }
+
+    companion object {
+        /** Opens the terminal, from the console notification. */
+        const val ACTION_OPEN_TERMINAL = "io.github.zachelks.proxkeep.action.OPEN_TERMINAL"
+
+        /** Opens the task list, from an alert or an app shortcut. */
+        const val ACTION_OPEN_TASKS = "io.github.zachelks.proxkeep.action.OPEN_TASKS"
+
+        /** Opens search, from an app shortcut. */
+        const val ACTION_OPEN_SEARCH = "io.github.zachelks.proxkeep.action.OPEN_SEARCH"
+
+        /** Opens a guest, from a shortcut to a guest opened recently. */
+        const val ACTION_OPEN_GUEST = "io.github.zachelks.proxkeep.action.OPEN_GUEST"
+        const val EXTRA_PROFILE_ID = "profile_id"
+        const val EXTRA_RESOURCE_ID = "resource_id"
     }
 }

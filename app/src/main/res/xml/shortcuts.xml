@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_search"
+        android:shortcutId="search"
+        android:shortcutShortLabel="@string/shortcut_search">
+        <intent
+            android:action="io.github.zachelks.proxkeep.action.OPEN_SEARCH"
+            android:targetClass="io.github.zachelks.proxkeep.MainActivity"
+            android:targetPackage="io.github.zachelks.proxkeep" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_tasks"
+        android:shortcutId="tasks"
+        android:shortcutShortLabel="@string/shortcut_tasks">
+        <intent
+            android:action="io.github.zachelks.proxkeep.action.OPEN_TASKS"
+            android:targetClass="io.github.zachelks.proxkeep.MainActivity"
+            android:targetPackage="io.github.zachelks.proxkeep" />
+    </shortcut>
+</shortcuts>

@@ -10,10 +10,15 @@ import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.GuestStatus
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.RrdPoint
+import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
 import io.github.zachelks.proxkeep.data.ClusterRepository
 import io.github.zachelks.proxkeep.data.ClusterState
 import io.github.zachelks.proxkeep.data.GuestActions
+import io.github.zachelks.proxkeep.data.GuestLifecycle
+import io.github.zachelks.proxkeep.data.LifecycleOperation
 import io.github.zachelks.proxkeep.data.RefreshSignal
+import io.github.zachelks.proxkeep.desktop.DesktopManager
 import io.github.zachelks.proxkeep.data.ServerAccess
 import io.github.zachelks.proxkeep.data.ServerAccessRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
@@ -24,6 +29,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -48,8 +54,24 @@ data class GuestDetail(
     val error: UiMessage? = null,
 )
 
+/**
+ * A guest's usage over time.
+ *
+ * @property points null until the first answer
+ * @property error set when the latest attempt to read the history failed
+ */
+data class UsageHistory(
+    val resourceId: String,
+    val timeframe: RrdTimeframe,
+    val points: List<RrdPoint>? = null,
+    val error: UiMessage? = null,
+)
+
 /** Where a guest's detail is read from. A change, such as a migration to another node, restarts the reading. */
 private data class GuestLocation(val profileId: String, val node: String, val kind: ResourceKind, val vmid: Int)
+
+/** The guest on screen and, while it is listed, where it is. */
+private data class Selection(val resourceId: String, val location: GuestLocation?)
 
 /** The Guests destination: the guest list, the open guest's detail, and its actions. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -60,6 +82,8 @@ class GuestsViewModel(
     private val actions: GuestActions,
     private val consoles: ConsoleManager,
     private val refreshSignal: RefreshSignal,
+    private val desktops: DesktopManager? = null,
+    lifecycle: GuestLifecycle? = null,
 ) : ViewModel() {
 
     val cluster: StateFlow<ClusterState> = clusterRepository.state
@@ -71,11 +95,46 @@ class GuestsViewModel(
             busy.filterKeys { it.profileId == profileId }.mapKeys { it.key.resourceId }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyMap())
 
+    /** Lifecycle operations in progress on the signed-in server's guests, by resource ID. */
+    val lifecycleBusy: StateFlow<Map<String, LifecycleOperation>> =
+        combine(lifecycle?.busy ?: flowOf(emptyMap()), servers.activeProfileId) { busy, profileId ->
+            busy.filterKeys { it.profileId == profileId }.mapKeys { it.key.resourceId }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyMap())
+
     private val selectedId = MutableStateFlow<String?>(null)
 
+    private val selection: Flow<Selection?> = selectedId
+        .flatMapLatest { resourceId ->
+            if (resourceId == null) {
+                flowOf(null)
+            } else {
+                cluster.map { state -> Selection(resourceId, (state as? ClusterState.Loaded)?.locate(resourceId)) }
+            }
+        }
+        .distinctUntilChanged()
+
     /** The detail of the selected guest, read again on the same schedule as the list. */
-    val detail: StateFlow<GuestDetail?> = selectedId
-        .flatMapLatest { resourceId -> if (resourceId == null) flowOf(null) else followDetail(resourceId) }
+    val detail: StateFlow<GuestDetail?> = selection
+        .flatMapLatest { selected ->
+            when {
+                selected == null -> flowOf(null)
+                selected.location == null -> flowOf(GuestDetail(selected.resourceId))
+                else -> readDetail(selected.resourceId, selected.location)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    private val _timeframe = MutableStateFlow(RrdTimeframe.Hour)
+
+    /** How far back the usage charts reach. */
+    val timeframe: StateFlow<RrdTimeframe> = _timeframe.asStateFlow()
+
+    /** The selected guest's usage history over [timeframe]. */
+    val history: StateFlow<UsageHistory?> = combine(selection, _timeframe) { selected, timeframe -> selected to timeframe }
+        .flatMapLatest { (selected, timeframe) ->
+            val location = selected?.location
+            if (location == null) flowOf(null) else readHistory(selected.resourceId, location, timeframe)
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 
     /** Tells the view model which guest is on screen, or null when none is. */
@@ -85,6 +144,10 @@ class GuestsViewModel(
 
     fun retry() {
         refreshSignal.request()
+    }
+
+    fun selectTimeframe(timeframe: RrdTimeframe) {
+        _timeframe.value = timeframe
     }
 
     fun runAction(resource: ClusterResource, action: GuestAction) {
@@ -98,10 +161,13 @@ class GuestsViewModel(
         consoles.open(ConsoleTarget.Guest(node, resource.kind, vmid), title = resource.name ?: vmid.toString())
     }
 
-    private fun followDetail(resourceId: String): Flow<GuestDetail> = cluster
-        .map { state -> (state as? ClusterState.Loaded)?.locate(resourceId) }
-        .distinctUntilChanged()
-        .flatMapLatest { location -> if (location == null) flowOf(GuestDetail(resourceId)) else readDetail(resourceId, location) }
+    /** Opens a virtual machine's display. */
+    fun openDesktop(resource: ClusterResource) {
+        val node = resource.node ?: return
+        val vmid = resource.vmid ?: return
+        if (resource.kind != ResourceKind.Qemu) return
+        desktops?.open(node, vmid, title = resource.name ?: vmid.toString())
+    }
 
     private fun ClusterState.Loaded.locate(resourceId: String): GuestLocation? {
         val resource = resources.firstOrNull { it.id == resourceId } ?: return null
@@ -136,7 +202,23 @@ class GuestsViewModel(
         }
     }
 
+    private fun readHistory(resourceId: String, at: GuestLocation, timeframe: RrdTimeframe): Flow<UsageHistory> = flow {
+        var current = history.value?.takeIf { it.resourceId == resourceId && it.timeframe == timeframe }
+            ?: UsageHistory(resourceId, timeframe)
+        emit(current)
+        // The finest history has a sample a minute, so reading it more often shows nothing new.
+        refreshSignal.ticks(HISTORY_REFRESH_MS).collect {
+            current = try {
+                UsageHistory(resourceId, timeframe, servers.request { it.guestRrd(at.node, at.kind, at.vmid, timeframe) })
+            } catch (e: IOException) {
+                current.copy(error = e.toUiMessage())
+            }
+            emit(current)
+        }
+    }
+
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+        const val HISTORY_REFRESH_MS = 60_000L
     }
 }

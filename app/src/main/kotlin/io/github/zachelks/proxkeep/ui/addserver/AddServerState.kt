@@ -4,7 +4,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.ConnectionOptions
 import io.github.zachelks.proxkeep.core.api.ProbeResult
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.ServerAddress
 import io.github.zachelks.proxkeep.core.api.auth.ApiTokenCredentials
 import io.github.zachelks.proxkeep.core.api.auth.Credentials
@@ -15,6 +17,7 @@ import io.github.zachelks.proxkeep.core.api.auth.TicketCredentials
 import io.github.zachelks.proxkeep.core.api.model.Realm
 import io.github.zachelks.proxkeep.core.api.tls.CertificateInfo
 import io.github.zachelks.proxkeep.data.AuthMethod
+import io.github.zachelks.proxkeep.data.HttpHeader
 import io.github.zachelks.proxkeep.data.ServerProfile
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.ui.UiMessage
@@ -33,13 +36,17 @@ import java.util.UUID
  * open and are cleared when it finishes or is cancelled.
  *
  * @param existing the saved server being signed in to, or null to add a new one
+ * @param existingHeaders the reverse proxy headers saved with [existing]
+ * @param existingPassword the password saved for [existing], if the person chose to save it
  */
 class AddServerState(
     private val repository: ServerRepository,
     private val scope: CoroutineScope,
     private val existing: ServerProfile?,
+    existingHeaders: List<HttpHeader> = emptyList(),
+    existingPassword: String? = null,
 ) {
-    enum class Step { Address, Certificate, SignIn, SecondFactor, Done }
+    enum class Step { Address, Certificate, SignIn, SecondFactor, WebSignIn, Done }
 
     var step by mutableStateOf(Step.Address)
         private set
@@ -53,6 +60,11 @@ class AddServerState(
     // Address step
     var host by mutableStateOf(existing?.address?.display.orEmpty())
     var name by mutableStateOf(existing?.name.orEmpty())
+
+    // Reverse proxy settings, on the address step
+    var headers by mutableStateOf(existingHeaders)
+        private set
+    var clientCertAlias by mutableStateOf(existing?.clientCertAlias)
 
     // Certificate step
     var certificate by mutableStateOf<CertificateInfo?>(null)
@@ -68,7 +80,10 @@ class AddServerState(
     var method by mutableStateOf(existing?.authMethod ?: AuthMethod.Password)
     var username by mutableStateOf(passwordPrincipal()?.substringBeforeLast('@').orEmpty())
     var realm by mutableStateOf(passwordPrincipal()?.substringAfterLast('@') ?: DEFAULT_REALM)
-    var password by mutableStateOf("")
+    var password by mutableStateOf(existingPassword.orEmpty())
+
+    /** Whether to keep the password, encrypted, so the app can sign in again by itself. */
+    var savePassword by mutableStateOf(existing?.encryptedPassword != null)
     var tokenId by mutableStateOf(existing?.takeIf { it.authMethod == AuthMethod.ApiToken }?.principal.orEmpty())
     var tokenSecret by mutableStateOf("")
 
@@ -79,6 +94,9 @@ class AddServerState(
     var code by mutableStateOf("")
 
     private var address: ServerAddress? = null
+    private var options = ConnectionOptions()
+    private var acceptedHeaders: List<HttpHeader> = emptyList()
+    private var passwordToSave: String? = null
     private var pin: String? = existing?.pinnedSha256
     private var challenge: TfaChallenge? = null
     private var challengeUser: String? = null
@@ -87,17 +105,59 @@ class AddServerState(
     private fun passwordPrincipal(): String? =
         existing?.takeIf { it.authMethod == AuthMethod.Password }?.principal
 
+    /** Which Proxmox product the server runs, which sets its default port and how the app signs in. */
+    var product by mutableStateOf(existing?.product ?: Product.Pve)
+
+    /** True when the server has realms that sign in through an external page, such as OpenID Connect. */
+    var hasWebRealms by mutableStateOf(false)
+        private set
+
+    /** The server's own login page, for [AuthMethod.Web]. */
+    val webSignInUrl: String?
+        get() = address?.let { "https://${it.display}/" }
+
+    /** The pinned certificate fingerprint the login page must present, if the platform does not trust it. */
+    val pinnedFingerprint: String?
+        get() = pin
+
+    fun addHeader() {
+        headers = headers + HttpHeader("", "")
+    }
+
+    fun setHeader(index: Int, header: HttpHeader) {
+        headers = headers.toMutableList().also { it[index] = header }
+    }
+
+    fun removeHeader(index: Int) {
+        headers = headers.toMutableList().also { it.removeAt(index) }
+    }
+
     /** Contacts the server at [host] and moves on to the certificate or sign-in step. */
     fun submitAddress() {
-        val parsed = ServerAddress.parse(host)
+        val parsed = ServerAddress.parse(host, product.defaultPort)
         if (parsed == null) {
             error = UiMessage(R.string.error_invalid_address)
             return
         }
+        val wanted = headers
+            .map { HttpHeader(it.name.trim(), it.value.trim()) }
+            .filterNot { it.name.isEmpty() && it.value.isEmpty() }
+        if (wanted.any { !ConnectionOptions.isValidName(it.name) || !ConnectionOptions.isValidValue(it.value) }) {
+            error = UiMessage(R.string.error_invalid_header)
+            return
+        }
+        val alias = clientCertAlias
         // A pinned fingerprint belongs to one address and is not carried to another.
         val knownPin = existing?.takeIf { it.address == parsed }?.pinnedSha256
         launch {
-            when (val result = repository.probe(parsed, knownPin)) {
+            val connection = repository.connectionOptions(wanted, alias)
+            if (alias != null && connection.clientKey == null) {
+                error = UiMessage(R.string.error_client_certificate_unavailable)
+                return@launch
+            }
+            options = connection
+            acceptedHeaders = wanted
+            when (val result = repository.probe(parsed, knownPin, connection)) {
                 is ProbeResult.Reachable -> {
                     pin = knownPin
                     showSignIn(parsed, result.realms)
@@ -120,7 +180,7 @@ class AddServerState(
         val target = address ?: return
         val shown = certificate ?: return
         launch {
-            when (val result = repository.probe(target, shown.sha256Fingerprint)) {
+            when (val result = repository.probe(target, shown.sha256Fingerprint, options)) {
                 is ProbeResult.Reachable -> {
                     pin = shown.sha256Fingerprint
                     showSignIn(target, result.realms)
@@ -140,6 +200,7 @@ class AddServerState(
 
     private fun showSignIn(target: ServerAddress, serverRealms: List<Realm>) {
         address = target
+        hasWebRealms = serverRealms.any { it.usesWebLogin }
         realms = serverRealms.filterNot { it.usesWebLogin }
         if (realms.isNotEmpty() && realms.none { it.realm == realm }) {
             realm = (realms.firstOrNull { it.isDefault } ?: realms.first()).realm
@@ -157,13 +218,18 @@ class AddServerState(
                     error = UiMessage(R.string.error_missing_credentials)
                     return
                 }
+                passwordToSave = secret.takeIf { savePassword }
                 launch {
-                    val client = repository.newClient(target, pin)
+                    val client = repository.newClient(target, pin, options, product)
                     when (val result = client.login(user, realm, secret)) {
                         is LoginResult.Success -> finish(target, result.credentials, result.clusterName)
                         is LoginResult.SecondFactorRequired -> showSecondFactor(result)
                     }
                 }
+            }
+            AuthMethod.Web -> {
+                error = null
+                step = Step.WebSignIn
             }
             AuthMethod.ApiToken -> {
                 val id = tokenId.trim()
@@ -175,7 +241,7 @@ class AddServerState(
                 launch {
                     val credentials = ApiTokenCredentials(id, secret)
                     // Any authenticated call proves the token works; this one needs no privileges.
-                    repository.newClient(target, pin).withCredentials(credentials).version()
+                    repository.newClient(target, pin, options, product).withCredentials(credentials).version()
                     finish(target, credentials, clusterName = null)
                 }
             }
@@ -208,9 +274,39 @@ class AddServerState(
             return
         }
         launch {
-            val result = repository.newClient(target, pin).completeSecondFactor(user, pending, factorKind, entered)
+            val result = repository.newClient(target, pin, options, product).completeSecondFactor(user, pending, factorKind, entered)
             finish(target, result.credentials, result.clusterName)
         }
+    }
+
+    /**
+     * Takes over the session the login page created, once its ticket cookie
+     * appears. Renewing the ticket at once checks it and gets the token that
+     * write requests need, which the cookie does not carry.
+     */
+    fun completeWebSignIn(ticket: String) {
+        val target = address ?: return
+        val user = TicketCredentials.usernameFromTicket(ticket)
+        if (user == null) {
+            error = UiMessage(R.string.error_web_sign_in)
+            step = Step.SignIn
+            return
+        }
+        launch {
+            try {
+                val credentials = repository.newClient(target, pin, options, product).renewTicket(TicketCredentials(user, ticket, null))
+                finish(target, credentials, clusterName = null)
+            } finally {
+                if (step == Step.WebSignIn) step = Step.SignIn
+            }
+        }
+    }
+
+    /** Called when the login page stopped working. */
+    fun webPageLost() {
+        if (step != Step.WebSignIn) return
+        error = UiMessage(R.string.error_web_page_lost)
+        step = Step.SignIn
     }
 
     private suspend fun finish(target: ServerAddress, credentials: Credentials, clusterName: String?) {
@@ -226,8 +322,10 @@ class AddServerState(
             pinnedSha256 = pin,
             authMethod = method,
             principal = principal,
+            clientCertAlias = clientCertAlias,
+            product = product,
         )
-        repository.saveAndActivate(profile, credentials)
+        repository.saveAndActivate(profile, credentials, acceptedHeaders, passwordToSave.takeIf { method == AuthMethod.Password })
         clearSecrets()
         step = Step.Done
     }
@@ -251,6 +349,10 @@ class AddServerState(
                 step = Step.SignIn
                 true
             }
+            Step.WebSignIn -> {
+                step = Step.SignIn
+                true
+            }
         }
     }
 
@@ -261,6 +363,10 @@ class AddServerState(
     }
 
     private fun clearSecrets() {
+        headers = emptyList()
+        acceptedHeaders = emptyList()
+        options = ConnectionOptions()
+        passwordToSave = null
         password = ""
         tokenSecret = ""
         code = ""

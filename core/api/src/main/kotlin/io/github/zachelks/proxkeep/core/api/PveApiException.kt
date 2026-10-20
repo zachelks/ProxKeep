@@ -30,3 +30,10 @@ class PveApiException(
         }
     }
 }
+
+/**
+ * The server does not publish its API schema, for example because the
+ * documentation package is not installed. This is not a refusal of the
+ * session's credentials, whatever the status code.
+ */
+class SchemaUnavailableException(val statusCode: Int) : IOException("The server does not publish its API schema ($statusCode)")

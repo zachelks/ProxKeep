@@ -1,5 +1,6 @@
 package io.github.zachelks.proxkeep.data
 
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.core.api.auth.ApiTokenCredentials
 import io.github.zachelks.proxkeep.core.api.tls.Fingerprints
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +21,7 @@ import java.util.concurrent.LinkedBlockingQueue
  * A server with a self-signed certificate that the test profile has pinned,
  * as after adding the server in the app.
  */
-class PinnedServer(id: String = "test-server") : AutoCloseable {
+class PinnedServer(id: String = "test-server", product: Product = Product.Pve) : AutoCloseable {
     private val certificate = HeldCertificate.Builder()
         .commonName("pve.test")
         .addSubjectAlternativeName("pve.test")
@@ -60,6 +61,7 @@ class PinnedServer(id: String = "test-server") : AutoCloseable {
         pinnedSha256 = fingerprint,
         authMethod = AuthMethod.ApiToken,
         principal = "root@pam!test",
+        product = product,
     )
 
     /** Answers the next request that has no [route], in the order enqueued. */

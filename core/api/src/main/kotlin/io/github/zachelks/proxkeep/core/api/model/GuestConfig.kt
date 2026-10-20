@@ -30,8 +30,11 @@ data class ConfigDevice(
  *
  * The configuration is a flat set of keys that differs by guest type and
  * grows with every server release, so it is kept as text and read by key.
+ *
+ * @property digest identifies this version of the configuration; send it
+ *   with a change so the server refuses it if someone else changed it first
  */
-data class GuestConfig(val values: Map<String, String>) {
+data class GuestConfig(val values: Map<String, String>, val digest: String? = null) {
 
     operator fun get(key: String): String? = values[key]
 
@@ -70,14 +73,14 @@ data class GuestConfig(val values: Map<String, String>) {
         get() = devices("net")
 
     companion object {
-        /** Keeps every plain value. Nested values and the change-detection digest are dropped. */
+        /** Keeps every plain value. Nested values are dropped. */
         fun fromJson(json: JsonObject): GuestConfig {
             val values = LinkedHashMap<String, String>()
             for ((key, element) in json) {
                 if (key == "digest") continue
                 if (element is JsonPrimitive && element !is JsonNull) values[key] = element.content
             }
-            return GuestConfig(values)
+            return GuestConfig(values, (json["digest"] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content)
         }
     }
 }

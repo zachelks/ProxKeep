@@ -11,7 +11,11 @@ data class StatusText(val text: String, val tone: StatusTone)
 
 /** Maps the server's status word for a node, guest or storage to display text. */
 @Composable
-fun ClusterResource.statusText(): StatusText {
+fun ClusterResource.statusText(): StatusText = statusTextOf(status, isTemplate)
+
+/** Maps a status word, as any Proxmox product reports it, to display text. */
+@Composable
+fun statusTextOf(status: String?, isTemplate: Boolean = false): StatusText {
     if (isTemplate) return StatusText(stringResource(R.string.status_template), StatusTone.Neutral)
     return when (val raw = status?.lowercase()) {
         "running" -> StatusText(stringResource(R.string.status_running), StatusTone.Good)

@@ -9,6 +9,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import java.io.IOException
 import java.security.GeneralSecurityException
@@ -19,6 +20,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class ServerRepositoryTest {
 
@@ -247,6 +249,142 @@ class ServerRepositoryTest {
         assertNull(StoredServers().active)
     }
 
+    @Test
+    fun proxyHeadersAreStoredEncryptedAndSentWithEveryRequest(): Unit = runBlocking {
+        val storage = MemoryProfileStorage()
+        val repository = startedRepository(storage)
+        val headers = listOf(HttpHeader("CF-Access-Client-Secret", "s3cret"))
+
+        repository.saveAndActivate(fixture.profile, ApiTokenCredentials(fixture.profile.principal, "secret"), headers)
+        fixture.enqueue("""{"data":{"version":"9.2.1"}}""")
+        repository.request { it.version() }
+
+        val saved = storage.read().profiles.single()
+        assertEquals("plain:" + """[{"name":"CF-Access-Client-Secret","value":"s3cret"}]""", saved.encryptedHeaders)
+        assertEquals(headers, repository.savedHeaders(saved))
+        assertEquals("s3cret", fixture.server.takeRequest().getHeader("CF-Access-Client-Secret"))
+    }
+
+    @Test
+    fun proxyHeadersAreRestoredOnStart(): Unit = runBlocking {
+        val stored = fixture.profile.copy(
+            encryptedSecret = "plain:secret",
+            encryptedHeaders = "plain:" + """[{"name":"X-Proxy-Token","value":"abc"}]""",
+        )
+        val repository = startedRepository(MemoryProfileStorage(StoredServers(listOf(stored), stored.id)))
+        fixture.enqueue("""{"data":{"version":"9.2.1"}}""")
+
+        repository.request { it.version() }
+
+        assertEquals("abc", fixture.server.takeRequest().getHeader("X-Proxy-Token"))
+    }
+
+    @Test
+    fun headersThatCannotBeDecryptedStartSignedOut(): Unit = runBlocking {
+        val stored = fixture.profile.copy(encryptedSecret = "plain:secret", encryptedHeaders = "from another device")
+        val picky = object : SecretCipher by PlainSecrets() {
+            override fun decrypt(encoded: String): String? = encoded.takeIf { it.startsWith("plain:") }?.removePrefix("plain:")
+        }
+        val repository = ServerRepository(MemoryProfileStorage(StoredServers(listOf(stored), stored.id)), picky, OkHttpClient(), scope)
+        repository.loaded.first { it }
+
+        assertEquals(Session.SignedOut(stored), repository.session.value)
+    }
+
+    @Test
+    fun theClientCertificateIsLookedUpByItsAlias(): Unit = runBlocking {
+        val asked = mutableListOf<String>()
+        val repository = ServerRepository(MemoryProfileStorage(), PlainSecrets(), OkHttpClient(), scope, ClientKeys { asked += it; null })
+        repository.loaded.first { it }
+
+        repository.saveAndActivate(fixture.profile.copy(clientCertAlias = "phone"), ApiTokenCredentials(fixture.profile.principal, "secret"))
+
+        assertEquals(listOf("phone"), asked)
+        assertEquals("phone", repository.servers.value.profiles.single().clientCertAlias)
+    }
+
+    @Test
+    fun aSavedPasswordSignsInOnStart(): Unit = runBlocking {
+        val stored = passwordProfile(encryptedPassword = "plain:pw")
+        fixture.route("/access/ticket", TICKET_RESPONSE)
+
+        val repository = startedRepository(MemoryProfileStorage(StoredServers(listOf(stored), stored.id)))
+        val session = withTimeout(TIMEOUT_MS) { repository.session.first { it is Session.Active } }
+
+        assertEquals(TicketCredentials("root@pam", TICKET, "csrf"), assertIs<Session.Active>(session).client.credentials)
+        val form = fixture.server.takeRequest().body.readUtf8()
+        assertTrue("username=root%40pam" in form && "password=pw" in form, form)
+    }
+
+    @Test
+    fun aRejectedSavedPasswordIsForgottenAndNotTriedAgain(): Unit = runBlocking {
+        val stored = passwordProfile(encryptedPassword = "plain:old")
+        val storage = MemoryProfileStorage(StoredServers(listOf(stored), stored.id))
+        fixture.route("/access/ticket", """{"data":null}""", code = 401)
+
+        val repository = startedRepository(storage)
+        withTimeout(TIMEOUT_MS) { repository.session.first { it is Session.SignedOut } }
+
+        assertNull(storage.read().profiles.single().encryptedPassword)
+        assertEquals(1, fixture.requestCount("/access/ticket"))
+    }
+
+    @Test
+    fun aSavedPasswordCannotAnswerASecondFactor(): Unit = runBlocking {
+        val stored = passwordProfile(encryptedPassword = "plain:pw")
+        val storage = MemoryProfileStorage(StoredServers(listOf(stored), stored.id))
+        fixture.route("/access/ticket", """{"data":{"username":"root@pam","ticket":"$TOTP_CHALLENGE"}}""")
+
+        val repository = startedRepository(storage)
+        withTimeout(TIMEOUT_MS) { repository.session.first { it is Session.SignedOut } }
+
+        assertEquals("plain:pw", storage.read().profiles.single().encryptedPassword, "the sign-in screen starts with it")
+        assertEquals("pw", repository.savedPassword(storage.read().profiles.single()))
+    }
+
+    @Test
+    fun anExpiredSessionSignsInAgainWithTheSavedPassword(): Unit = runBlocking {
+        val repository = startedRepository(MemoryProfileStorage())
+        repository.saveAndActivate(passwordProfile(), TicketCredentials("root@pam", "PVE:old", "csrf"), savedPassword = "pw")
+        fixture.route("/version", """{"data":null}""", code = 401)
+        fixture.route("/access/ticket", TICKET_RESPONSE)
+
+        assertFailsWith<PveApiException> { repository.request { it.version() } }
+        val renewed = withTimeout(TIMEOUT_MS) { repository.session.first { it is Session.Active } }
+
+        assertEquals(TICKET, (assertIs<Session.Active>(renewed).client.credentials as TicketCredentials).ticket)
+    }
+
+    @Test
+    fun aPasswordIsSavedOnlyWhenAskedAndNeverForATokenSession(): Unit = runBlocking {
+        val storage = MemoryProfileStorage()
+        val repository = startedRepository(storage)
+
+        repository.saveAndActivate(passwordProfile(), TicketCredentials("root@pam", TICKET, "csrf"))
+        assertNull(storage.read().profiles.single().encryptedPassword)
+
+        repository.saveAndActivate(passwordProfile(), TicketCredentials("root@pam", TICKET, "csrf"), savedPassword = "pw")
+        assertEquals("plain:pw", storage.read().profiles.single().encryptedPassword)
+
+        repository.saveAndActivate(fixture.profile, ApiTokenCredentials(fixture.profile.principal, "secret"), savedPassword = "pw")
+        assertNull(storage.read().profiles.single().encryptedPassword)
+    }
+
+    @Test
+    fun signingOutForgetsTheSavedPassword(): Unit = runBlocking {
+        val storage = MemoryProfileStorage()
+        val repository = startedRepository(storage)
+        repository.saveAndActivate(passwordProfile(), TicketCredentials("root@pam", TICKET, "csrf"), savedPassword = "pw")
+
+        repository.signOut()
+
+        assertIs<Session.SignedOut>(repository.session.value)
+        assertNull(storage.read().profiles.single().encryptedPassword)
+    }
+
+    private fun passwordProfile(encryptedPassword: String? = null) =
+        fixture.profile.copy(authMethod = AuthMethod.Password, principal = "root@pam", encryptedPassword = encryptedPassword)
+
     private suspend fun startedRepository(storage: ProfileStorage): ServerRepository {
         val repository = ServerRepository(storage, PlainSecrets(), OkHttpClient(), scope)
         repository.loaded.first { it }
@@ -255,4 +393,11 @@ class ServerRepositoryTest {
 
     private fun signedOutProfile(id: String) =
         fixture.profile.copy(id = id, name = id, authMethod = AuthMethod.Password, principal = "root@pam")
+
+    private companion object {
+        const val TIMEOUT_MS = 10_000L
+        const val TICKET = "PVE:root@pam:6712F3A1::c2lnbmF0dXJl"
+        const val TICKET_RESPONSE = """{"data":{"username":"root@pam","ticket":"$TICKET","CSRFPreventionToken":"csrf"}}"""
+        const val TOTP_CHALLENGE = "PVE:!tfa!%7B%22totp%22%3Atrue%7D:6712F3A1::Y2hhbGxlbmdl"
+    }
 }

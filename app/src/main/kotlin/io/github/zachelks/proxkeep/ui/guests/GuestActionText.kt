@@ -66,7 +66,13 @@ val GuestAction.confirmBody: Int?
 fun ActionEvent.message(resources: Resources): String {
     val text = action.text()
     if (succeeded) return resources.getString(text.done, guestName)
-    val summary = resources.getString(text.failed, guestName)
     val reason = detail?.trim().orEmpty()
+    // The server gives a guest a limited time to answer a shutdown. Many still shut down after that.
+    if (action in GRACEFUL && reason.contains("timeout", ignoreCase = true)) {
+        return resources.getString(R.string.action_graceful_timed_out, guestName)
+    }
+    val summary = resources.getString(text.failed, guestName)
     return if (reason.isEmpty()) summary else "$summary\n$reason"
 }
+
+private val GRACEFUL = setOf(GuestAction.Shutdown, GuestAction.Reboot)

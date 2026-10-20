@@ -16,6 +16,23 @@ data class TicketCredentials(
     val csrfToken: String?,
 ) : Credentials {
     override fun toString(): String = "TicketCredentials(username=$username)"
+
+    companion object {
+        private val TICKET_PREFIXES = setOf("PVE", "PBS", "PDM")
+
+        /**
+         * The user a ticket was issued to. Tickets have the form
+         * `PVE:user@realm:hex-time::signature`, with `PBS` or `PDM` for the
+         * other products. Returns null for anything else, including a
+         * second-factor challenge, which is not a usable ticket.
+         */
+        fun usernameFromTicket(ticket: String): String? {
+            val parts = ticket.split(':')
+            if (parts.size < 3 || parts[0] !in TICKET_PREFIXES) return null
+            val user = parts[1]
+            return user.takeIf { '@' in it && !it.startsWith('!') }
+        }
+    }
 }
 
 /**

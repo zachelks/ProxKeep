@@ -12,3 +12,4 @@ captures/
 keystore.properties
 .DS_Store
 build.log
+__pycache__/
