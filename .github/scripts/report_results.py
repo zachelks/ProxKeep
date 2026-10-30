@@ -31,6 +31,13 @@ def listing(items: list[str]) -> str:
     return "\n".join(shown) + (f"\n... and {more} more" if more > 0 else "")
 
 
+def test_frame(class_name: str, trace: str) -> str:
+    """The test's own line in the stack trace, which shows which step failed."""
+    simple = class_name.rsplit(".", 1)[-1]
+    match = re.search(rf"at {re.escape(class_name)}\.[^(]*\(({re.escape(simple)}\.\w+:\d+)\)", trace)
+    return f" ({match.group(1)})" if match else ""
+
+
 def report_tests() -> None:
     total = skipped = 0
     failures: list[str] = []
@@ -48,7 +55,8 @@ def report_tests() -> None:
                 problem = case.find("error")
             if problem is not None:
                 detail = (problem.get("message") or problem.text or "").strip()
-                failures.append(f"{case.get('classname')}.{case.get('name')}: {detail[:500]}")
+                where = test_frame(case.get("classname") or "", problem.text or "")
+                failures.append(f"{case.get('classname')}.{case.get('name')}{where}: {detail[:500]}")
     if total == 0:
         emit("warning", "Tests", "No test results were found.")
         return

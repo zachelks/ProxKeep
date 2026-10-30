@@ -2,7 +2,11 @@
 
 package io.github.zachelks.proxkeep.ui.addserver
 
+import android.os.Handler
+import android.os.Looper
+import android.security.KeyChain
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,11 +19,13 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -37,10 +43,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -48,10 +59,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.Product
+import io.github.zachelks.proxkeep.core.api.ServerAddress
 import io.github.zachelks.proxkeep.core.api.auth.SecondFactorKind
 import io.github.zachelks.proxkeep.core.api.tls.CertificateInfo
 import io.github.zachelks.proxkeep.data.AuthMethod
 import io.github.zachelks.proxkeep.ui.addserver.AddServerState.Step
+import io.github.zachelks.proxkeep.ui.components.RadioChoices
 import io.github.zachelks.proxkeep.ui.text
 import java.text.DateFormat
 import java.util.Date
@@ -81,6 +95,23 @@ fun AddServerFlow(state: AddServerState, onClose: () -> Unit) {
             )
         },
     ) { innerPadding ->
+        val url = state.webSignInUrl
+        if (state.step == Step.WebSignIn && url != null) {
+            // The page needs the whole screen, and scrolls by itself.
+            Column(modifier = Modifier.fillMaxSize().padding(innerPadding).consumeWindowInsets(innerPadding).imePadding()) {
+                if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                WebSignInPage(
+                    url = url,
+                    pinnedFingerprint = state.pinnedFingerprint,
+                    clientCertAlias = state.clientCertAlias,
+                    onTicket = state::completeWebSignIn,
+                    onPageLost = state::webPageLost,
+                    cookieName = state.product.cookieName,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            return@Scaffold
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -105,7 +136,7 @@ fun AddServerFlow(state: AddServerState, onClose: () -> Unit) {
                     Step.Certificate -> CertificateStep(state)
                     Step.SignIn -> SignInStep(state)
                     Step.SecondFactor -> SecondFactorStep(state)
-                    Step.Done -> Unit
+                    Step.WebSignIn, Step.Done -> Unit
                 }
                 state.error?.let { message ->
                     Text(
@@ -124,6 +155,7 @@ private fun titleFor(state: AddServerState): Int = when (state.step) {
     Step.Certificate -> R.string.certificate_title
     Step.SignIn, Step.Done -> R.string.sign_in_title
     Step.SecondFactor -> R.string.second_factor_title
+    Step.WebSignIn -> R.string.web_sign_in_title
 }
 
 @Composable
@@ -132,12 +164,17 @@ private fun AddressStep(state: AddServerState) {
         text = stringResource(R.string.address_intro),
         style = MaterialTheme.typography.bodyLarge,
     )
+    if (state.isNewServer) {
+        Text(stringResource(R.string.field_product), style = MaterialTheme.typography.titleSmall)
+        val labels = Product.entries.associateWith { stringResource(it.label) }
+        RadioChoices(Product.entries, state.product, label = { labels.getValue(it) }, onSelect = { state.product = it })
+    }
     OutlinedTextField(
         value = state.host,
         onValueChange = { state.host = it },
         label = { Text(stringResource(R.string.field_address)) },
         placeholder = { Text(stringResource(R.string.field_address_placeholder)) },
-        supportingText = { Text(stringResource(R.string.field_address_hint)) },
+        supportingText = { Text(stringResource(R.string.field_address_hint, state.product.defaultPort)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,
@@ -157,12 +194,89 @@ private fun AddressStep(state: AddServerState) {
         keyboardActions = KeyboardActions(onGo = { state.submitAddress() }),
         modifier = Modifier.fillMaxWidth(),
     )
+    var showProxy by rememberSaveable { mutableStateOf(state.headers.isNotEmpty() || state.clientCertAlias != null) }
+    TextButton(onClick = { showProxy = !showProxy }) {
+        Text(stringResource(if (showProxy) R.string.proxy_hide else R.string.proxy_show))
+    }
+    if (showProxy) ReverseProxySettings(state)
     Button(
         onClick = state::submitAddress,
         enabled = !state.busy && state.host.isNotBlank(),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(stringResource(R.string.action_continue))
+    }
+}
+
+/** Extra headers and a client certificate, for a reverse proxy that needs them. */
+@Composable
+private fun ReverseProxySettings(state: AddServerState) {
+    Text(
+        text = stringResource(R.string.proxy_intro),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(stringResource(R.string.proxy_headers), style = MaterialTheme.typography.titleSmall)
+    state.headers.forEachIndexed { index, header ->
+        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = header.name,
+                    onValueChange = { state.setHeader(index, header.copy(name = it)) },
+                    label = { Text(stringResource(R.string.field_header_name)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = header.value,
+                    onValueChange = { state.setHeader(index, header.copy(value = it)) },
+                    label = { Text(stringResource(R.string.field_header_value)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(onClick = { state.removeHeader(index) }) {
+                    Text(stringResource(R.string.action_remove_header))
+                }
+            }
+        }
+    }
+    TextButton(onClick = state::addHeader) { Text(stringResource(R.string.action_add_header)) }
+
+    Text(stringResource(R.string.proxy_client_certificate), style = MaterialTheme.typography.titleSmall)
+    Text(
+        text = state.clientCertAlias ?: stringResource(R.string.proxy_no_certificate),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    val activity = LocalActivity.current
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (activity != null) {
+            TextButton(
+                onClick = {
+                    val address = ServerAddress.parse(state.host)
+                    val main = Handler(Looper.getMainLooper())
+                    // The system chooser also grants the app access to the key the person picks.
+                    KeyChain.choosePrivateKeyAlias(
+                        activity,
+                        { alias -> if (alias != null) main.post { state.clientCertAlias = alias } },
+                        null,
+                        null,
+                        address?.host,
+                        address?.port ?: -1,
+                        state.clientCertAlias,
+                    )
+                },
+            ) {
+                Text(stringResource(R.string.action_choose_certificate))
+            }
+        }
+        if (state.clientCertAlias != null) {
+            TextButton(onClick = { state.clientCertAlias = null }) {
+                Text(stringResource(R.string.action_remove_certificate))
+            }
+        }
     }
 }
 
@@ -251,7 +365,7 @@ private fun CertificateField(label: String, value: @Composable () -> Unit) {
 
 @Composable
 private fun SignInStep(state: AddServerState) {
-    val methods = listOf(AuthMethod.Password, AuthMethod.ApiToken)
+    val methods = listOf(AuthMethod.Password, AuthMethod.ApiToken, AuthMethod.Web)
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         methods.forEachIndexed { index, method ->
             SegmentedButton(
@@ -259,7 +373,15 @@ private fun SignInStep(state: AddServerState) {
                 onClick = { state.method = method },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = methods.size),
             ) {
-                Text(stringResource(if (method == AuthMethod.Password) R.string.method_password else R.string.method_token))
+                Text(
+                    stringResource(
+                        when (method) {
+                            AuthMethod.Password -> R.string.method_password
+                            AuthMethod.ApiToken -> R.string.method_token
+                            AuthMethod.Web -> R.string.method_web
+                        },
+                    ),
+                )
             }
         }
     }
@@ -313,8 +435,28 @@ private fun SignInStep(state: AddServerState) {
                 keyboardActions = KeyboardActions(onDone = { state.submitSignIn() }),
                 modifier = Modifier.fillMaxWidth(),
             )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(value = state.savePassword, role = Role.Checkbox, onValueChange = { state.savePassword = it }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = state.savePassword, onCheckedChange = null)
+                Text(stringResource(R.string.save_password), modifier = Modifier.padding(start = 12.dp))
+            }
             Text(
-                text = stringResource(R.string.password_not_stored),
+                text = stringResource(if (state.savePassword) R.string.password_saved_explained else R.string.password_not_stored),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        AuthMethod.Web -> {
+            Text(text = stringResource(R.string.web_sign_in_explained), style = MaterialTheme.typography.bodyMedium)
+            if (state.hasWebRealms) {
+                Text(text = stringResource(R.string.web_sign_in_realms), style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                text = stringResource(R.string.web_sign_in_security_keys),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -361,7 +503,7 @@ private fun SignInStep(state: AddServerState) {
         enabled = !state.busy,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(stringResource(R.string.action_sign_in))
+        Text(stringResource(if (state.method == AuthMethod.Web) R.string.action_open_sign_in_page else R.string.action_sign_in))
     }
 }
 

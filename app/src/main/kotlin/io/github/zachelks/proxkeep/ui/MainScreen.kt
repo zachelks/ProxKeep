@@ -25,7 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.zachelks.proxkeep.R
+import io.github.zachelks.proxkeep.core.api.Product
 import io.github.zachelks.proxkeep.data.Session
+import io.github.zachelks.proxkeep.ui.backupserver.BackupServerHome
 import io.github.zachelks.proxkeep.ui.cluster.InfrastructureRoute
 import io.github.zachelks.proxkeep.ui.cluster.OverviewRoute
 import io.github.zachelks.proxkeep.ui.components.CenteredProgress
@@ -33,8 +35,13 @@ import io.github.zachelks.proxkeep.ui.components.MainTopBar
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
 import io.github.zachelks.proxkeep.ui.guests.GuestsPane
 import io.github.zachelks.proxkeep.ui.guests.message
+import io.github.zachelks.proxkeep.ui.lifecycle.message
+import io.github.zachelks.proxkeep.ui.manager.ManagerHome
 import io.github.zachelks.proxkeep.ui.navigation.Navigator
 import io.github.zachelks.proxkeep.ui.navigation.Route
+import io.github.zachelks.proxkeep.ui.search.SearchScreen
+import io.github.zachelks.proxkeep.ui.search.SearchViewModel
+import io.github.zachelks.proxkeep.ui.storage.message
 import io.github.zachelks.proxkeep.ui.tasks.TasksPane
 
 /** The app bar of a top-level destination, given its title. */
@@ -50,77 +57,156 @@ fun MainScreen(navigator: Navigator) {
     val container = appContainer()
     val viewModel = viewModel { ShellViewModel(container.repository, container.guestActions, container.refresh) }
     var destination by rememberSaveable { mutableStateOf(TopLevelDestination.Overview) }
-
-    // Back from another destination returns to Overview before leaving the app.
-    BackHandler(enabled = destination != TopLevelDestination.Overview) {
-        destination = TopLevelDestination.Overview
+    val requestedDestination by container.pendingNavigation.destination.collectAsStateWithLifecycle()
+    LaunchedEffect(requestedDestination) {
+        container.pendingNavigation.takeDestination()?.let { destination = it }
+    }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    val searchRequested by container.pendingNavigation.search.collectAsStateWithLifecycle()
+    LaunchedEffect(searchRequested) {
+        if (container.pendingNavigation.takeSearch()) searching = true
     }
 
+    // A guest picked in search, until the Guests pane has opened it.
+    var guestToOpen by rememberSaveable { mutableStateOf<String?>(null) }
+    // A shortcut to a guest on another saved server switches to that server first.
+    val guestRequested by container.pendingNavigation.guest.collectAsStateWithLifecycle()
+    LaunchedEffect(guestRequested) {
+        val request = container.pendingNavigation.takeGuest() ?: return@LaunchedEffect
+        val current = (container.repository.session.value as? Session.Active)?.profile?.id
+        if (current != request.profileId && container.repository.servers.value.profiles.any { it.id == request.profileId }) {
+            container.repository.activate(request.profileId)
+        }
+        destination = TopLevelDestination.Guests
+        guestToOpen = request.resourceId
+    }
+
+    // Back from another destination returns to Overview before leaving the app.
     val session by viewModel.session.collectAsStateWithLifecycle()
+    val product = (session as? Session.Active)?.profile?.product ?: Product.Pve
+    BackHandler(enabled = destination != TopLevelDestination.Overview && product == Product.Pve) {
+        destination = TopLevelDestination.Overview
+    }
+    BackHandler(enabled = searching) { searching = false }
+
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
+    val consoles by container.consoles.sessions.collectAsStateWithLifecycle()
+    val desktop by container.desktops.current.collectAsStateWithLifecycle()
 
     val snackbars = remember { SnackbarHostState() }
     val resources = LocalResources.current
     LaunchedEffect(viewModel, resources) {
         viewModel.events.collect { event -> snackbars.showSnackbar(event.message(resources)) }
     }
+    LaunchedEffect(container.guestLifecycle, resources) {
+        container.guestLifecycle.events.collect { event -> snackbars.showSnackbar(event.message(resources)) }
+    }
+    LaunchedEffect(container.transfers, resources) {
+        container.transfers.events.collect { event -> snackbars.showSnackbar(event.message(resources)) }
+    }
 
     val topBar: TopBar = { title ->
         MainTopBar(
             title = title,
             viewModel = viewModel,
+            openConsoles = consoles.size,
+            onOpenConsoles = { navigator.open(Route.Terminal) },
+            desktopOpen = desktop != null,
+            onOpenDesktop = { navigator.open(Route.Desktop) },
+            // Search covers a Proxmox VE cluster's guests, nodes and storage.
+            onSearch = if (product == Product.Pve) ({ searching = true }) else null,
             onAddServer = { navigator.open(Route.SignIn()) },
             onSettings = { navigator.open(Route.Settings) },
         )
     }
     val openTerminal = { navigator.open(Route.Terminal) }
 
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            TopLevelDestination.entries.forEach { entry ->
-                item(
-                    selected = entry == destination,
-                    onClick = { destination = entry },
-                    icon = { Icon(painter = painterResource(entry.icon), contentDescription = null) },
-                    label = { Text(stringResource(entry.label)) },
-                )
-            }
-        },
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            val active = session as? Session.Active
-            when {
-                // These two destinations manage their own list and detail panes.
-                active != null && destination == TopLevelDestination.Guests ->
-                    GuestsPane(topBar = topBar, onConsoleOpened = openTerminal)
-                active != null && destination == TopLevelDestination.Tasks ->
-                    TasksPane(topBar = topBar)
-                else -> Scaffold(topBar = { topBar(stringResource(destination.label)) }) { innerPadding ->
-                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                        when {
-                            !loaded -> CenteredProgress()
-                            session == Session.None -> MessageWithAction(
-                                message = stringResource(destination.emptyMessage),
-                                actionLabel = stringResource(R.string.action_add_server),
-                                onAction = { navigator.open(Route.SignIn()) },
-                            )
-                            session is Session.SignedOut -> {
-                                val profile = (session as Session.SignedOut).profile
-                                MessageWithAction(
-                                    message = stringResource(R.string.signed_out_message, profile.name),
-                                    actionLabel = stringResource(R.string.action_sign_in),
-                                    onAction = { navigator.open(Route.SignIn(profile.id)) },
+    // A Backup Server and a Datacenter Manager have screens of their own.
+    when (product) {
+        Product.Pbs -> {
+            BackupServerHome(topBar = topBar, snackbars = snackbars, onOpenRoute = navigator::open)
+            return
+        }
+        Product.Pdm -> {
+            ManagerHome(topBar = topBar, snackbars = snackbars, onOpenRoute = navigator::open)
+            return
+        }
+        Product.Pve -> Unit
+    }
+
+    // The search covers the destinations while it is open.
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavigationSuiteScaffold(
+            navigationSuiteItems = {
+                TopLevelDestination.entries.forEach { entry ->
+                    item(
+                        selected = entry == destination,
+                        onClick = { destination = entry },
+                        icon = { Icon(painter = painterResource(entry.icon), contentDescription = null) },
+                        label = { Text(stringResource(entry.label)) },
+                    )
+                }
+            },
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                val active = session as? Session.Active
+                when {
+                    // These two destinations manage their own list and detail panes.
+                    active != null && destination == TopLevelDestination.Guests ->
+                        GuestsPane(
+                            topBar = topBar,
+                            onConsoleOpened = openTerminal,
+                            onDesktopOpened = { navigator.open(Route.Desktop) },
+                            onOpenRoute = navigator::open,
+                            guestToOpen = guestToOpen,
+                            onGuestOpened = { guestToOpen = null },
+                        )
+                    active != null && destination == TopLevelDestination.Tasks ->
+                        TasksPane(topBar = topBar)
+                    else -> Scaffold(topBar = { topBar(stringResource(destination.label)) }) { innerPadding ->
+                        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                            when {
+                                !loaded || session is Session.SigningIn -> CenteredProgress()
+                                session == Session.None -> MessageWithAction(
+                                    message = stringResource(destination.emptyMessage),
+                                    actionLabel = stringResource(R.string.action_add_server),
+                                    onAction = { navigator.open(Route.SignIn()) },
                                 )
+                                session is Session.SignedOut -> {
+                                    val profile = (session as Session.SignedOut).profile
+                                    MessageWithAction(
+                                        message = stringResource(R.string.signed_out_message, profile.name),
+                                        actionLabel = stringResource(R.string.action_sign_in),
+                                        onAction = { navigator.open(Route.SignIn(profile.id)) },
+                                    )
+                                }
+                                active != null && destination == TopLevelDestination.Overview ->
+                                    OverviewRoute(profile = active.profile, onOpenRoute = navigator::open)
+                                active != null && destination == TopLevelDestination.Infrastructure ->
+                                    InfrastructureRoute(onConsoleOpened = openTerminal, onOpenRoute = navigator::open)
                             }
-                            active != null && destination == TopLevelDestination.Overview ->
-                                OverviewRoute(profile = active.profile)
-                            active != null && destination == TopLevelDestination.Infrastructure ->
-                                InfrastructureRoute(onConsoleOpened = openTerminal)
                         }
                     }
                 }
+                SnackbarHost(hostState = snackbars, modifier = Modifier.align(Alignment.BottomCenter))
             }
-            SnackbarHost(hostState = snackbars, modifier = Modifier.align(Alignment.BottomCenter))
+        }
+
+        if (searching && session is Session.Active && product == Product.Pve) {
+            val search = viewModel { SearchViewModel(container.cluster, container.refresh) }
+            SearchScreen(
+                viewModel = search,
+                onClose = { searching = false },
+                onOpen = { resource ->
+                    searching = false
+                    if (resource.isGuest) {
+                        guestToOpen = resource.id
+                        destination = TopLevelDestination.Guests
+                    } else {
+                        destination = TopLevelDestination.Infrastructure
+                    }
+                },
+            )
         }
     }
 }

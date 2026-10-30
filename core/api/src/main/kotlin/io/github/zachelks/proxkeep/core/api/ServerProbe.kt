@@ -43,9 +43,10 @@ suspend fun probeServer(
     baseUrl: HttpUrl,
     http: OkHttpClient,
     pinnedSha256: String? = null,
+    options: ConnectionOptions = ConnectionOptions(),
 ): ProbeResult {
-    val trust = ServerTrust(pinnedSha256)
-    val client = PveClient(baseUrl, trust.applyTo(http))
+    val trust = ServerTrust(pinnedSha256, clientKey = options.clientKey)
+    val client = PveClient(baseUrl, options.applyTo(trust.applyTo(http)))
     return try {
         val realms = client.realms()
         ProbeResult.Reachable(realms, trust.lastServerCertificate?.let(CertificateInfo::from))

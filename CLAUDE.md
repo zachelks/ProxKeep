@@ -30,16 +30,16 @@ Nothing has an instrumented test or emulator setup. Behavior on a device and aga
 
 App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that works:
 
-- Plain JVM for code without Android types: repositories, view models, `AddServerState`, `Navigator`, `AppLock`. View model tests use `MainDispatcherRule`, which moves the main dispatcher to background threads. Cancel `viewModelScope` in teardown.
+- Plain JVM for code without Android types: repositories, view models, `AddServerState`, `Navigator`, `AppLock`. View model tests use `MainDispatcherRule`, which moves the main dispatcher to background threads. Cancel `viewModelScope` in teardown. Don't use the rule in Compose tests: Compose needs the real main thread, which Robolectric provides.
 - Robolectric (`@RunWith(RobolectricTestRunner::class)`) for code that needs the Android framework or the app's resources: `ProfileStore`, `AppSettings`, the console classes, and anything that takes a `Context`.
-- Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`.
+- Compose tests on Robolectric for UI behavior, with `androidx.compose.ui.test.junit4.v2.createComposeRule`. Look up expected text from `strings.xml` with `getString`; don't hard-code English. `AppLaunchTest` starts the real `MainActivity`. View model coroutines resume on the main looper after each network reply, and the v2 rule's `waitUntil` does not always run the looper once Compose is idle. Wait with `waitWithLooper` (`ComposeWaits.kt`) instead, and collect view model flows from a background scope in the test, as `LifecycleDialogsTest` does. A text field inside a dialog never lets Compose go idle under some `@Config` screen qualifiers, so keep the default size and scroll to rows instead.
 
 `PinnedServer` (`data/TestServers.kt`) is a `MockWebServer` with a pinned self-signed certificate. `enqueue` answers requests in order. `route` answers by path, which suits loaders that poll several endpoints at once. Over HTTPS it speaks HTTP/2, which has no reason phrase, so put an error's text in the body's `message` field, as Proxmox does.
 
 ## Modules
 
-- `core:api`: a plain Kotlin/JVM module with no Android dependencies. It holds the Proxmox client (`PveClient`), models, lenient JSON, TLS trust and the console websocket. Keep Android types out of it so its tests run on the JVM against `MockWebServer`, including real TLS handshakes.
-- `app`: the Android application.
+- `core:api`: a plain Kotlin/JVM module with no Android dependencies. It holds the Proxmox client (`PveClient`), models, lenient JSON, TLS trust, the console websocket and the VNC client (`vnc/`). Keep Android types out of it so its tests run on the JVM against `MockWebServer`, including real TLS handshakes.
+- `app`: the Android application. Background work uses WorkManager; the widget uses Glance.
 - `terminal:emulator` and `terminal:view` are vendored from Termux. They are unmodified apart from a rewritten `TerminalSession.java`, which uses a `Transport` instead of a local process. Read `terminal/README.md` before you touch them. Keep changes out of these modules where possible, so upstream updates stay a copy-over.
 
 ## Architecture
@@ -50,66 +50,126 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - Every request for the signed-in server goes through `ServerRepository.request { client -> … }`. It is the one place that handles rejected credentials (it signs the session out), and it throws `NotSignedInException` when nothing is signed in. Don't read `Session.Active.client` directly for requests.
 - `activeProfileId` changes only when the server or sign-in changes, not on ticket renewal. Loaders `flatMapLatest` on it, so a server switch cancels in-flight loads and data from one server is never shown under another.
 - `PveClient` is immutable. `withCredentials` returns a new client, and ticket renewal (every 30 minutes) swaps the client inside `Session.Active`.
-- Login tickets live only in memory. API token secrets are encrypted by `SecretBox` with an Android Keystore AES-GCM key.
+- Login tickets live only in memory. API token secrets, reverse proxy header values and opt-in saved passwords are encrypted by `SecretBox` with an Android Keystore AES-GCM key.
+- `Session.SigningIn` means the app is signing in with a saved password, on start or after the session expired. A password the server rejects is forgotten at once, so retries never lock an account. Signing out forgets it too.
+- Sign-in methods (`AuthMethod`): password with TOTP or recovery codes, API token, and `Web`, the server's own login page in a WebView (`ui/addserver/WebSignIn.kt`) for security keys and OpenID Connect. The app takes the ticket from the product's cookie (`Product.cookieName`, read by `TicketCookie`, which also knows the `__Host-` prefix), renews it once to get a CSRF token, and clears the WebView's cookies.
+- Reverse proxies: a profile can carry extra headers and a KeyChain client certificate alias. `ConnectionOptions` (core:api) adds the headers to every request, including the console websocket, without replacing the session's own credentials. `ServerTrust` presents the client certificate.
 - `ServerRepository` depends on the `ProfileStorage` and `SecretCipher` interfaces (`data/Storage.kt`), so it and the loaders are unit-tested on the JVM against `PinnedServer` (see Tests above).
 
-**TLS.** `ServerTrust` accepts a certificate only if the platform trusts it or its SHA-256 fingerprint matches the profile's pin. Each server gets a copy of the shared OkHttp client carrying its own trust settings. `probeServer` makes first contact and reports an untrusted certificate rather than sending anything. Never add a trust-all path.
+**TLS.** `ServerTrust` accepts a certificate only if the platform trusts it or its SHA-256 fingerprint matches the profile's pin. Each server gets a copy of the shared OkHttp client carrying its own trust settings. `probeServer` makes first contact and reports an untrusted certificate rather than sending anything. The web sign-in WebView applies the same rule in `onReceivedSslError`. Never add a trust-all path.
 
 **Data loading.** Live data loads only while a screen collects it: loaders are `StateFlow`s built with `stateIn(…, WhileSubscribed(5 s))`, and screens collect with `collectAsStateWithLifecycle`, so nothing loads in the background or behind the app lock.
 - `RefreshSignal.ticks()` paces every loader: at once, every 10 s, and whenever `request()` is called (the refresh button, a finished power action).
-- `ClusterRepository` holds the one `/cluster/resources` call that feeds Overview, Guests and Infrastructure.
+- `ClusterRepository` holds the one `/cluster/resources` call that feeds Overview, Guests, Infrastructure and search.
 - `ServerAccessRepository` holds the server version and the credentials' permissions (`/access/permissions`). Use `ServerAccess.allows(paths, privilege)` to decide whether to offer an action; it allows everything while permissions are unknown, because the server enforces them anyway. `Permissions.guestPaths` includes the guest's pool.
-- `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`.
+- `GuestActions` runs power actions at app level, so a result is not lost when the screen changes, and reports outcomes on `events`. `GuestLifecycle` does the same for creation, snapshots, backups, restores, migrations, clones, templates and deletions, following each task on the node named in its UPID.
+- Wait for a call's task with `PveClient.awaitIfTask(reply)`: it reads the reply with `Upid.parse` and returns null when the reply is no task ID, which some calls return instead. `awaitTask` takes a parsed `Upid`, so no caller follows a task by a node it chose itself. Never split task IDs on `:` or `!`; an API token's user ID holds a `!` too. A Backup Server and a Datacenter Manager read their own tasks under `localhost`, whatever host name the ID carries.
+- `LifecycleViewModel` serves one guest's Snapshots and Backups screens and its lifecycle dialogs. `availableLifecycleItems` decides what the guest's menu offers.
 
 **Navigation.** Navigation 3 (`ui/AppNavigation.kt`). The back stack is a list of `Route`s, saved across rotation and process death, and changed only through `Navigator`.
 - `Route.Main` is always at the bottom. `MainScreen` holds the four top-level destinations (`TopLevelDestination`) as tabs in a `NavigationSuiteScaffold`. Back from another tab returns to Overview.
 - Settings, sign-in and the terminal are routes pushed over `Main`. Each route gets its own `ViewModelStore`, cleared when the route is closed.
 - Routes hold IDs, never data, because they are serialized with the back stack.
 
-**View models.** One per feature: `ShellViewModel` (server menu, refresh, action messages), `ClusterViewModel` (Overview, Infrastructure), `GuestsViewModel` (list, detail, actions), `TasksViewModel` (list, log follower), `AddServerViewModel` (sign-in flow). Polling and other data logic belong in the view model or a repository, not in composables. Guests and Tasks use Material 3 adaptive list-detail panes; the pane tells the view model what is selected.
+**View models.** One per feature: `ShellViewModel` (server menu, refresh, action messages), `ClusterViewModel` (Overview, Infrastructure), `GuestsViewModel` (list, detail, usage history, actions), `TasksViewModel` (list, log follower), `SearchViewModel` (search overlay), `AddServerViewModel` (sign-in flow). Polling and other data logic belong in the view model or a repository, not in composables. Guests and Tasks use Material 3 adaptive list-detail panes; the pane tells the view model what is selected. Anything a screen must not miss, such as "saved, close now", is a `StateFlow`, not a one-off event: a screen that is not collecting at that moment, during a rotation for example, still sees it.
+
+**Crash reports.** `CrashLog` keeps the last crash's stack trace in `filesDir`, and Settings offers to share it, since nothing here has a crash reporting service. Nothing leaves the device unless the person shares it.
 
 **App lock.** `AppLock` holds the timing rules and has no Android dependencies, so it is unit-tested. `ProcessLifecycleOwner` drives it from `ProxKeepApplication`. While the app is locked, `AppRoot` composes only `LockScreen`, so nothing behind the lock fetches or shows data. `MainActivity` is a `FragmentActivity` because `BiometricPrompt` requires one.
+
+**Configuration.**
+- The long tail of settings is rendered from the server's own API schema. `ApiSchema` (core:api `schema/`) reads the schema at the start of the API viewer's script, `/pve-docs/api-viewer/apidoc.js`, which the server publishes for its version (`apidata.js` is only a build step and is not installed). `SchemaRepository` downloads it once per server and version into the cache directory. A server without the file throws `SchemaUnavailableException`, which never signs the session out.
+- `PropertyString` reads and writes composite values such as `virtio=BC:…,bridge=vmbr0`, keeping their key order. `check` validates a value against its `ParamSchema` the way the server will.
+- `SchemaForm` is the plain, tested state of a schema-driven form: values, what changed, problems and the server's refusals by key. `SchemaFieldEditor` renders one setting by its type.
+- `GuestConfigViewModel` serves a guest's settings screen. It reads the configuration when the screen opens and after each change, not on a timer, so an open form is never replaced. Every change carries the configuration's digest, so a change made elsewhere meanwhile is refused, not overwritten. Virtual machines apply changes as a task (POST); containers apply them at once (PUT).
+- Hardware is edited by hand (`ui/config/Hardware.kt`, `HardwareDialogs.kt`); `HardwareFormats` covers its property strings without the schema. Options come from the schema, minus the keys `hardwareKeys` lists.
+- The create wizards (`ui/create/`) are hand-designed. `VmDraft` and `CtDraft` check each step and build the creation parameters; they are plain and tested.
+
+**Nodes, storage and backups.**
+- `NodeViewModel` serves a node's screen (`ui/nodes/`): each tab's data is its own `StateFlow`, so a part loads only while its tab is on screen. Power actions, service actions and network changes run through one `run` that follows the task and reports on `messages`.
+- `SchemaEditScreen` (`Route.SchemaEdit`) edits or creates any API object from its method in the schema: `PUT` reads the object first, `POST` starts from presets. It sends only what changed, with the object's digest. Use it for long-tail forms, such as network interfaces, storage configuration and backup jobs. `PveClient.read` and `write` reach any path for it.
+- `StorageTransfers` runs uploads and downloads at app level, like `GuestLifecycle`, so they outlive the screen. `TransferService`, a foreground service of the data sync type, runs exactly while one is under way, as `ConsoleService` does for consoles, so they carry on in the background. Uploads stream from a `ContentResolver` in `PveClient.upload`, with no write timeout.
+- `BackupJobsViewModel.runPlan` runs a job now on each node that holds its guests, because a backup runs where its guests are. `GuestLifecycle.restoreAsNew` and `backupKind` serve restoring a backup beside its guest.
+
+**Datacenter.**
+- `DatacenterScreen` lists the datacenter's sections (`DATACENTER_GROUPS`). Each entry names a schema path, and entries the server's schema lacks are hidden; all show while the schema is unknown.
+- Most sections are collections described in `Collections.kt`: list path, ID key, item path and display keys, all schema templates such as `/access/users/{userid}/token/{tokenid}`. `CollectionScreen` and `CollectionViewModel` list, delete and act on them for any entry; editing and creating open `SchemaEditScreen`. Add a section by adding a `CollectionSpec`, not a screen.
+- Firewalls share their lists: `FirewallScope` (cluster, node, virtual machine, container) names each one's base path, and `firewallSpecs` builds its rules, aliases, IP sets and log from it. `firewallGroups` gives a scope's options and lists for `SectionList`; a node's screen shows them as a tab and a guest's menu opens `GuestFirewallScreen`.
+- Path values go through `CollectionSpec.fill`, which encodes slashes with `encodePathValue`; `PveClient` decodes each segment, so `10.0.0.0/8` stays one segment.
+- Deletes send the list's `digest` when the item's delete takes one, which the schema says once it has loaded; until then `CollectionSpec.positional` decides. Firewall rules are addressed by position, so this keeps a stale list from deleting the wrong rule. Editing a positional item carries the list's digest too (`Route.SchemaEdit.digest`), not the one read when the form opens.
+- Permissions have no item paths, so they are removed with `PUT /access/acl` and `delete=1` (`aclRemoval`). A write that returns a secret, such as a new API token, shows it once (`SchemaEditViewModel.secret`).
+- Two-factor management is hand-designed (`TwoFactorScreen`), on core:api `access/TwoFactor.kt`, and serves all three products. `Totp` generates the secret; an authenticator is added only once the server accepts a code from it. The server asks everyone but `root@pam` for their own password to change second factors, so the dialogs ask for it. The open dialog lives in `TwoFactorViewModel`, so the secret survives rotation and a dialog closes only after its change succeeds. Security keys need the web interface.
+- Ceph's status is hand-designed (`CephScreen`), since its JSON changes between Ceph releases; `CephStatus.fromJson` reads what is there.
+- `SectionList` renders any list of `DatacenterGroup`s, so the Backup Server's administration reuses it.
+
+**Products.** A profile names its `Product`: Proxmox VE, Backup Server or Datacenter Manager. The product sets the default port, the ticket cookie, the API token header and where the schema is published; `PveClient` carries it and keeps it across `withCredentials`. All three share the `/api2/json` layout, sign-in, realms, second factors and tasks, so one client serves them. `PveClient.clusterTasks` reads `/nodes/localhost/tasks` on the products without a cluster.
+- `MainScreen` shows the VE destinations for Proxmox VE and hands over to `BackupServerHome` for a Backup Server and `ManagerHome` for a Datacenter Manager. Search, the widget's snapshot and offline-node alerts are VE only; failed-task alerts work for every product.
+
+**Backup Server.**
+- The calls are extension functions in core:api `pbs/BackupServer.kt`, built on `PveClient.read` and `write`. The server calls itself `localhost` (`PBS_NODE`).
+- `BackupServerHome` has three destinations: datastores (the server's status and each datastore's space), tasks (the shared `TasksPane`) and administration (`BACKUP_SERVER_GROUPS`, through the collection engine: datastore configuration, sync, verify and prune jobs, remotes, traffic control, users, services, updates, network, DNS, time, disks and notifications).
+- `DatastoreScreen` browses a datastore's groups by namespace and runs garbage collection, verification and pruning; long tasks are reported once started and followed in Tasks. `BackupGroupScreen` verifies, protects and deletes snapshots, and previews a prune with a dry run before applying it.
+
+**Datacenter Manager.**
+- The calls are in core:api `pdm/DatacenterManager.kt`. `/resources/list` gives every remote's resources in one call; a remote the manager cannot reach carries an `error`.
+- A remote's tasks have IDs of the form `remote!UPID:…`. `PveClient.taskStatus` and `taskLog` follow them under `/pve/remotes/{remote}/tasks`, so `awaitTask`, schema forms and the task log work for them unchanged. `clusterTasks` adds `/remote-tasks/list` to the manager's own tasks.
+- `ManagerViewModel` serves `ManagerHome`: remotes with node and guest counts, resources across remotes with search and filters (`filterResources`), tasks and administration (`MANAGER_GROUPS`). `RemoteGuestDialog` starts, shuts down and stops a remote guest. Migration, within a cluster or to another remote, opens the schema form of the manager's own `migrate` and `remote-migrate` calls, so it offers what the manager's version takes.
+
+**Background work.**
+- `StatusWorker` (WorkManager) runs while alerts are on or a widget or tile is placed. It checks every saved server it can reach without the person (`ServerRepository.backgroundClient`: the session's client, an API token, or a saved password without a second factor) and records the signed-in server's `StatusSnapshot`. A saved password rejected in the background is forgotten, as on sign-in.
+- `AlertChecker` is plain and tested: the first check of a server only records what it sees; later ones report failed tasks and nodes going offline or coming back. `AlertNotifier` keeps details off the lock screen.
+- `StatusSurfaces` holds the snapshot for `StatusWidget` (Glance) and `StatusTileService`. Both hide server details while the app lock is on.
+- `PendingNavigation` also carries a destination, a search request and a guest from notifications and app shortcuts. Recently opened guests become dynamic shortcuts (`GuestShortcuts.kt`).
+
+**Remote desktop.**
+- `RfbClient` (core:api `vnc/`) speaks the VNC protocol: versions 3.3 to 3.8, no authentication or VNC passwords, and the Raw, CopyRect and ZRLE encodings, with resizes and a client-drawn pointer. It refuses screens over 4096 pixels a side, pointers over 256 pixels a side, and ZRLE data longer than its rectangle could need, compressed or inflated, since all these sizes come from the server. `RfbException.problem` says what went wrong, which `DesktopScreen` words from `strings.xml`; only the server's own refusal text is shown as sent. `VncConnection` carries it over the server's `vncwebsocket` relay, with the bytes in binary messages; `PveClient.openDesktop` asks for a VNC proxy with a generated password first.
+- `DesktopManager` holds at most one `DesktopSession` at the app level, like the consoles. `DesktopScreen` draws the framebuffer into a bitmap, copying only the changed region.
+- Input rules are plain, tested classes: `GestureInterpreter` turns touches into pointer actions for both pointer modes, `Viewport` does fit, zoom and pan, `DesktopController` applies them and the sticky modifiers, and `Keysyms` maps Android keys to X11 keysyms. Keep this logic out of the composable.
 
 **Consoles.**
 - `PveClient.openConsole` asks the server for a terminal proxy, then connects through its websocket relay.
 - `ConsoleChannel` implements the pve-xtermjs framing: a ticket handshake, then `OK`, data and resize frames, and a 30 s keep-alive. The console websocket has no read timeout, because idle shells are quiet.
-- `ConsoleManager` holds one `ConsoleSession` at the app level, so it survives rotation and the lock. Switching servers or signing out closes it.
+- `ConsoleManager` holds the open `ConsoleSession`s and the one on screen, at the app level, so they survive rotation, the lock and leaving the terminal. Opening a console for a target that already has one connected returns to it, since each console is a task on the server. Switching servers or signing out closes them all.
+- `ConsoleService` is a foreground service (special-use type) that runs exactly while a console is open, so consoles stay connected in the background. `AppContainer` starts it with the first console; it stops itself after the last. Its notification opens the terminal through `PendingNavigation`.
+- The extra-keys row (`console/TerminalKey.kt`), text size, font and color scheme (`console/TerminalAppearance.kt`) are settings in `AppSettings`. Termux keeps one color scheme for all terminals; `ConsoleManager.refreshColors` repaints open ones. Termux paints only cells whose background differs from the scheme's, so `TerminalScreen` gives the view the scheme's background.
 
 ## Conventions
 
 - User-facing text lives in `app/src/main/res/values/strings.xml`. Use `<plurals>` for counts. `UiMessage` carries string resources out of the view model.
 - Write user-facing text, commit messages and pull request descriptions in plain, short sentences. Commits have an imperative subject and a body explaining why. Pull request bodies have the sections "What's included", "Checks", "How to test" and "Known limits".
 - Status colors are always paired with an icon or label (`ui/theme/StatusColors.kt`). Graceful shutdown stays visually and spatially separate from stop and reset, which ask for confirmation.
+- Charts (`ui/components/UsageChart.kt`) show one measure on one scale, at most two series, in the fixed colors from `ui/theme/ChartColors.kt`, with a text description for screen readers. Never put two scales on one chart.
 - Proxmox returns loosely typed JSON, such as `0`/`1` booleans and numbers as strings. Use the serializers in `core/api/json/LenientSerializers.kt` for new model fields.
 - Licensing: the app is GPLv3 because the Termux code is GPLv3 only. ProxKeep's own code is GPLv3-or-later. Don't use the Proxmox name or logo as the app's name or icon.
 
 ## Where the code differs from the spec
 
-- The API client is hand-written, not generated from the Proxmox schema.
+- The API client is hand-written, not generated from the Proxmox schema. Schema-driven forms read the schema from the signed-in server at runtime instead, so they match its version.
 - Termux's terminal libraries are GPLv3 only, not Apache 2.0 as the spec says. See the license note above.
+- The remote desktop uses a VNC client written in Kotlin in core:api, not LibVNCClient. It speaks the protocol over the websocket directly, so the spec's local socket bridge and the NDK build are not needed.
 
 ## Milestone progress
 
-**Milestone 1, Foundation.** Mostly done. Server profiles, password and TOTP sign-in, API tokens, TLS pinning, app lock, Overview, the guest list and detail, power actions, task tracking, and hiding power, console and shell actions the user lacks permission for all work.
+**Milestone 1, Foundation.** Done in code. Server profiles, password and TOTP sign-in, API tokens, web sign-in for security keys and OpenID Connect, reverse proxy headers and client certificates, opt-in saved passwords, TLS pinning, app lock, Overview, the guest list and detail with usage charts, search, power actions, task tracking, and hiding actions the user lacks permission for.
 
-Still missing from milestone 1:
-- WebAuthn and OpenID Connect web sign-in
-- custom headers and client certificates for reverse proxies
-- opt-in saved passwords
-- global search
-- usage charts
+Not yet confirmed against a real server:
+- Console with an API token.
+- Web sign-in. Security keys in the WebView need the server's domain to publish Digital Asset Links for the app. Without that, a security-key account signs in with a password and code, or an API token.
 
-Of the three prototypes the spec puts first:
-- Console with an API token: built, but not yet confirmed against a real server.
-- WebAuthn in an in-app browser: not started.
-- VNC over the websocket: not started.
+VNC over the websocket, the third prototype, is built: see milestone 3.
 
-**Milestone 2, Terminal.** In progress. Done: the websocket session layer, the extra-keys row with sticky modifiers, hardware keyboard, pinch zoom, selection, copy and paste.
+**Milestone 2, Terminal.** Done in code: the websocket session layer, several consoles at once, a foreground service that keeps them connected, a customizable extra-keys row with key repeat and function keys, hardware keyboard, pinch zoom, font and color scheme settings, selection, copy and paste. A long editing session against a real server still needs checking by hand.
 
-Still missing from milestone 2:
-- several sessions at once
-- a foreground service to keep consoles alive in the background
-- a customizable extra-keys row with key repeat
-- font and color scheme settings
+**Milestone 3, Remote desktop.** Done in code: the VNC client, touch and trackpad pointer modes, zoom, the extra-keys bar, hardware keyboard and mouse, clipboard both ways, immersive mode and picture-in-picture. Not yet confirmed against real Windows and Linux guests. Not done: external displays, pointer capture for a mouse, and QEMU's extended key events for keyboard layouts other than the server's.
 
-**Milestones 3 to 9.** Not started.
+**Milestone 4, Guest lifecycle.** Done in code: snapshots, backup now, restore, migrate, clone, convert to template and delete. Restoring as a new guest and backup jobs come with milestone 6. The first public release follows this milestone; it needs testing against real servers first.
+
+**Milestone 5, Configuration.** Done in code: schema-driven options, hand-designed hardware editing (processor, memory, disks, CD and DVD drives, network devices), cloud-init settings, pending changes, and wizards for new virtual machines and containers. Moving disks and container volumes to another storage is done too. Not yet confirmed against a real server.
+
+**Milestone 6, Nodes, storage and alerts.** Done in code: node management (summary and history, updates with an upgrade console, services, network interfaces, DNS and time, certificates, disks and SMART, the system journal, reboot and shutdown), the storage browser with uploads, downloads from a URL and the template catalog, storage configuration, backup jobs, restoring as a new guest, background alerts, a status widget, a Quick Settings tile and app shortcuts. Not yet confirmed against a real server. The network tab does not show the pending configuration's difference.
+
+**Milestone 7, Datacenter.** Done in code: cluster options, access control (users, API tokens, groups, pools, roles, permissions, realms), the datacenter, node and guest firewalls, high availability, replication, SDN, Ceph status and pools, notifications and two-factor management. Not yet confirmed against a real server. Not done: Ceph OSD and monitor management, a summary of what applying SDN changes, and hiding actions the user lacks permission for (the collections decide from the schema only).
+
+**Milestone 8, Backup Server.** Done in code: a product choice when adding a server, the server's status, datastores with space, deduplication and estimated full date, namespaces, backup groups and snapshots, garbage collection, verification, pruning with a preview, protection and deletion, sync, verify and prune jobs with run now, remotes, datastore configuration and the server's administration. Not yet confirmed against a real server. Not done: tape, restoring single files, permission management, the Backup Server's own node screen, and hiding actions the user lacks permission for.
+
+**Milestone 9, Datacenter Manager.** Done in code: remotes with their state, resources across remotes with search, power actions on remote guests, migration within a cluster and between remotes, remote tasks, adding and editing remotes, and the manager's administration. Not yet confirmed against a real server. Not done: the manager's dashboards and views, SDN across remotes, a remote's own screens through the manager, the widget for a manager, and hiding actions the user lacks permission for.

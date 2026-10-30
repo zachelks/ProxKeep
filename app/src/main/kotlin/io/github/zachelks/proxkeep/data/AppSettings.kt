@@ -2,6 +2,9 @@ package io.github.zachelks.proxkeep.data
 
 import android.content.Context
 import androidx.core.content.edit
+import io.github.zachelks.proxkeep.console.TerminalFont
+import io.github.zachelks.proxkeep.console.TerminalKey
+import io.github.zachelks.proxkeep.console.TerminalPalette
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +27,26 @@ enum class LockTimeout(val seconds: Int) {
     }
 }
 
+/** The text sizes the terminal can take, in sp. */
+/** How often background checks run. Android runs periodic work at most every 15 minutes. */
+enum class AlertInterval(val minutes: Int) {
+    FifteenMinutes(15),
+    ThirtyMinutes(30),
+    OneHour(60),
+    ThreeHours(180),
+    ;
+
+    companion object {
+        val Default = FifteenMinutes
+
+        fun fromMinutes(minutes: Int): AlertInterval = entries.firstOrNull { it.minutes == minutes } ?: Default
+    }
+}
+
+val TERMINAL_TEXT_SIZES_SP = 7..36
+
+const val DEFAULT_TEXT_SIZE_SP = 14
+
 /** The app's own preferences, kept in app-private storage. */
 class AppSettings(context: Context) {
     private val preferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -35,6 +58,84 @@ class AppSettings(context: Context) {
         LockTimeout.fromSeconds(preferences.getInt(KEY_LOCK_TIMEOUT, LockTimeout.Default.seconds)),
     )
     val lockTimeout: StateFlow<LockTimeout> = _lockTimeout.asStateFlow()
+
+    private val _extraKeys = MutableStateFlow(
+        preferences.getString(KEY_EXTRA_KEYS, null)?.let(TerminalKey::parse) ?: TerminalKey.DEFAULT_ROW,
+    )
+
+    /** The terminal's extra-keys row, in order. Empty hides the row. */
+    val extraKeys: StateFlow<List<TerminalKey>> = _extraKeys.asStateFlow()
+
+    fun setExtraKeys(row: List<TerminalKey>) {
+        val distinct = row.distinct()
+        preferences.edit { putString(KEY_EXTRA_KEYS, TerminalKey.encode(distinct)) }
+        _extraKeys.value = distinct
+    }
+
+    private val _terminalTextSize = MutableStateFlow(
+        preferences.getInt(KEY_TEXT_SIZE, DEFAULT_TEXT_SIZE_SP).coerceIn(TERMINAL_TEXT_SIZES_SP),
+    )
+
+    /** The terminal's text size in sp. Pinching the terminal changes it too. */
+    val terminalTextSize: StateFlow<Int> = _terminalTextSize.asStateFlow()
+
+    fun setTerminalTextSize(sizeSp: Int) {
+        val size = sizeSp.coerceIn(TERMINAL_TEXT_SIZES_SP)
+        if (size == _terminalTextSize.value) return
+        preferences.edit { putInt(KEY_TEXT_SIZE, size) }
+        _terminalTextSize.value = size
+    }
+
+    private val _terminalFont = MutableStateFlow(
+        TerminalFont.entries.firstOrNull { it.name == preferences.getString(KEY_FONT, null) } ?: TerminalFont.System,
+    )
+    val terminalFont: StateFlow<TerminalFont> = _terminalFont.asStateFlow()
+
+    fun setTerminalFont(font: TerminalFont) {
+        preferences.edit { putString(KEY_FONT, font.name) }
+        _terminalFont.value = font
+    }
+
+    private val _terminalPalette = MutableStateFlow(
+        TerminalPalette.entries.firstOrNull { it.name == preferences.getString(KEY_PALETTE, null) } ?: TerminalPalette.Default,
+    )
+    val terminalPalette: StateFlow<TerminalPalette> = _terminalPalette.asStateFlow()
+
+    fun setTerminalPalette(palette: TerminalPalette) {
+        preferences.edit { putString(KEY_PALETTE, palette.name) }
+        _terminalPalette.value = palette
+    }
+
+    private val _alertsEnabled = MutableStateFlow(preferences.getBoolean(KEY_ALERTS, false))
+
+    /** Whether the app checks servers in the background and notifies about problems. */
+    val alertsEnabled: StateFlow<Boolean> = _alertsEnabled.asStateFlow()
+
+    private val _alertKinds = MutableStateFlow(
+        AlertKinds(preferences.getBoolean(KEY_ALERT_TASKS, true), preferences.getBoolean(KEY_ALERT_NODES, true)),
+    )
+    val alertKinds: StateFlow<AlertKinds> = _alertKinds.asStateFlow()
+
+    private val _alertInterval = MutableStateFlow(AlertInterval.fromMinutes(preferences.getInt(KEY_ALERT_INTERVAL, AlertInterval.Default.minutes)))
+    val alertInterval: StateFlow<AlertInterval> = _alertInterval.asStateFlow()
+
+    fun setAlertsEnabled(enabled: Boolean) {
+        preferences.edit { putBoolean(KEY_ALERTS, enabled) }
+        _alertsEnabled.value = enabled
+    }
+
+    fun setAlertKinds(kinds: AlertKinds) {
+        preferences.edit {
+            putBoolean(KEY_ALERT_TASKS, kinds.failedTasks)
+            putBoolean(KEY_ALERT_NODES, kinds.offlineNodes)
+        }
+        _alertKinds.value = kinds
+    }
+
+    fun setAlertInterval(interval: AlertInterval) {
+        preferences.edit { putInt(KEY_ALERT_INTERVAL, interval.minutes) }
+        _alertInterval.value = interval
+    }
 
     fun setLockEnabled(enabled: Boolean) {
         preferences.edit { putBoolean(KEY_LOCK_ENABLED, enabled) }
@@ -49,5 +150,13 @@ class AppSettings(context: Context) {
     private companion object {
         const val KEY_LOCK_ENABLED = "app_lock_enabled"
         const val KEY_LOCK_TIMEOUT = "app_lock_timeout_seconds"
+        const val KEY_EXTRA_KEYS = "terminal_extra_keys"
+        const val KEY_TEXT_SIZE = "terminal_text_size_sp"
+        const val KEY_FONT = "terminal_font"
+        const val KEY_PALETTE = "terminal_palette"
+        const val KEY_ALERTS = "alerts_enabled"
+        const val KEY_ALERT_TASKS = "alerts_failed_tasks"
+        const val KEY_ALERT_NODES = "alerts_offline_nodes"
+        const val KEY_ALERT_INTERVAL = "alerts_interval_minutes"
     }
 }

@@ -17,14 +17,13 @@ private const val MAX_CONSECUTIVE_FAILURES = 5
  * @throws IOException when the status can no longer be read
  */
 suspend fun PveClient.awaitTask(
-    node: String,
-    upid: String,
+    task: Upid,
     pollIntervalMs: Long = 1_000,
 ): TaskStatus {
     var failures = 0
     while (true) {
         try {
-            val status = taskStatus(node, upid)
+            val status = taskStatus(task.node, task.text)
             if (!status.isRunning) return status
             failures = 0
         } catch (e: PveApiException) {
@@ -36,3 +35,13 @@ suspend fun PveClient.awaitTask(
         delay(pollIntervalMs)
     }
 }
+
+/**
+ * Waits for the task a call started, when its [reply] is a task's ID, and
+ * returns the task's final status. Returns null when the reply is no task
+ * ID, such as nothing or a new volume's ID: the call finished at once.
+ *
+ * @throws IOException when the status can no longer be read
+ */
+suspend fun PveClient.awaitIfTask(reply: String?, pollIntervalMs: Long = 1_000): TaskStatus? =
+    reply?.let(Upid::parse)?.let { awaitTask(it, pollIntervalMs) }

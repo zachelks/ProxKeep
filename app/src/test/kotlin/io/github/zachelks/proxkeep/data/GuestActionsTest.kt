@@ -54,7 +54,8 @@ class GuestActionsTest {
 
         assertEquals(false, event.succeeded)
         assertEquals("VM 100 is locked (backup)", event.detail)
-        assertTrue(actions.busy.value.isEmpty())
+        // The event is sent just before the guest stops being busy.
+        withTimeout(5_000) { actions.busy.first { it.isEmpty() } }
     }
 
     @Test

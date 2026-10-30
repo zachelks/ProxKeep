@@ -49,6 +49,12 @@ import io.github.zachelks.proxkeep.core.api.model.GuestAction
 import io.github.zachelks.proxkeep.core.api.model.GuestConfig
 import io.github.zachelks.proxkeep.core.api.model.GuestOsInfo
 import io.github.zachelks.proxkeep.core.api.model.ResourceKind
+import io.github.zachelks.proxkeep.core.api.model.RrdTimeframe
+import io.github.zachelks.proxkeep.data.LifecycleOperation
+import io.github.zachelks.proxkeep.ui.lifecycle.LifecycleMenuItem
+import io.github.zachelks.proxkeep.ui.lifecycle.isDestructive
+import io.github.zachelks.proxkeep.ui.lifecycle.label
+import io.github.zachelks.proxkeep.ui.lifecycle.progressLabel
 import io.github.zachelks.proxkeep.ui.cluster.StatusText
 import io.github.zachelks.proxkeep.ui.cluster.statusText
 import io.github.zachelks.proxkeep.ui.components.MessageWithAction
@@ -70,12 +76,16 @@ private const val BYTES_PER_MIB = 1024L * 1024L
  * @param busyAction the power action in progress on this guest, if any
  * @param canPowerManage whether the user may start, stop and otherwise control the guest
  * @param canOpenConsole whether the user may open the guest's console
+ * @param history the guest's usage over [timeframe]
  * @param showBack true when the list is not visible beside this pane
  */
 @Composable
 fun GuestDetailPane(
     resource: ClusterResource?,
     detail: GuestDetail?,
+    history: UsageHistory?,
+    timeframe: RrdTimeframe,
+    onTimeframe: (RrdTimeframe) -> Unit,
     busyAction: GuestAction?,
     canPowerManage: Boolean,
     canOpenConsole: Boolean,
@@ -83,7 +93,12 @@ fun GuestDetailPane(
     onBack: () -> Unit,
     onAction: (GuestAction) -> Unit,
     onOpenConsole: () -> Unit,
+    onOpenDisplay: () -> Unit = {},
+    lifecycleItems: List<LifecycleMenuItem> = emptyList(),
+    lifecycleBusy: LifecycleOperation? = null,
+    onLifecycle: (LifecycleMenuItem) -> Unit = {},
 ) {
+    var lifecycleMenuOpen by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -106,12 +121,55 @@ fun GuestDetailPane(
                     }
                 },
                 actions = {
+                    if (resource != null && canOpenConsole && hasDisplay(resource)) {
+                        IconButton(onClick = onOpenDisplay) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_desktop),
+                                contentDescription = stringResource(R.string.action_open_display),
+                            )
+                        }
+                    }
                     if (resource != null && canOpenConsole && hasTextConsole(resource, detail?.config)) {
                         IconButton(onClick = onOpenConsole) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_terminal),
                                 contentDescription = stringResource(R.string.action_open_console),
                             )
+                        }
+                    }
+                    if (resource != null && lifecycleItems.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { lifecycleMenuOpen = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_more_vert),
+                                    contentDescription = stringResource(R.string.action_guest_menu, resource.name ?: resource.id),
+                                )
+                            }
+                            DropdownMenu(expanded = lifecycleMenuOpen, onDismissRequest = { lifecycleMenuOpen = false }) {
+                                val (gentle, destructive) = lifecycleItems.partition { !it.isDestructive }
+                                gentle.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(item.label)) },
+                                        enabled = lifecycleBusy == null,
+                                        onClick = {
+                                            lifecycleMenuOpen = false
+                                            onLifecycle(item)
+                                        },
+                                    )
+                                }
+                                if (gentle.isNotEmpty() && destructive.isNotEmpty()) HorizontalDivider()
+                                destructive.forEach { item ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(item.label)) },
+                                        enabled = lifecycleBusy == null,
+                                        colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error),
+                                        onClick = {
+                                            lifecycleMenuOpen = false
+                                            onLifecycle(item)
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -136,10 +194,11 @@ fun GuestDetailPane(
             val paused = detail?.status?.isPaused == true
             StatusRow(resource = resource, paused = paused, lock = detail?.status?.lock ?: resource.lock)
 
-            if (busyAction != null) {
+            val progress = busyAction?.inProgressLabel ?: lifecycleBusy?.progressLabel
+            if (progress != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text(text = stringResource(busyAction.inProgressLabel), style = MaterialTheme.typography.bodyMedium)
+                    Text(text = stringResource(progress), style = MaterialTheme.typography.bodyMedium)
                 }
             }
 
@@ -152,12 +211,14 @@ fun GuestDetailPane(
                         isPaused = paused,
                         isTemplate = resource.isTemplate,
                     ),
-                    enabled = busyAction == null,
+                    enabled = busyAction == null && lifecycleBusy == null,
                     onAction = onAction,
                 )
             }
 
             if (resource.status == "running") UsageCard(resource)
+
+            if (!resource.isTemplate) UsageHistoryCard(history, timeframe, onTimeframe)
 
             detail?.error?.let { error ->
                 Text(
@@ -191,6 +252,10 @@ private fun hasTextConsole(resource: ClusterResource, config: GuestConfig?): Boo
         else -> false
     }
 }
+
+/** Whether the guest has a graphical display to open: a running virtual machine. */
+private fun hasDisplay(resource: ClusterResource): Boolean =
+    resource.kind == ResourceKind.Qemu && resource.status == "running" && !resource.isTemplate
 
 @Composable
 private fun guestSubtitle(resource: ClusterResource): String {

@@ -45,4 +45,11 @@ class ServerAddressTest {
         assertEquals("https://192.168.1.225:8006/api2/json/", ServerAddress("192.168.1.225").apiBaseUrl.toString())
         assertEquals("192.168.1.225:8006", ServerAddress("192.168.1.225").display)
     }
+
+    @Test
+    fun theDefaultPortDependsOnTheProduct() {
+        assertEquals(ServerAddress("pbs.example.com", 8007), ServerAddress.parse("pbs.example.com", Product.Pbs.defaultPort))
+        assertEquals(ServerAddress("pbs.example.com", 443), ServerAddress.parse("pbs.example.com:443", Product.Pbs.defaultPort))
+        assertEquals("https://pdm.example.com:8443/api2/json/", ServerAddress.parse("pdm.example.com", Product.Pdm.defaultPort)!!.apiBaseUrl.toString())
+    }
 }
