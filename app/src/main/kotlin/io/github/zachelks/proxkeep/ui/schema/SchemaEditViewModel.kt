@@ -3,13 +3,14 @@ package io.github.zachelks.proxkeep.ui.schema
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.zachelks.proxkeep.R
-import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.PveApiException
+import io.github.zachelks.proxkeep.core.api.awaitIfTask
 import io.github.zachelks.proxkeep.core.api.schema.ApiMethod
 import io.github.zachelks.proxkeep.data.RefreshSignal
 import io.github.zachelks.proxkeep.data.SchemaRepository
 import io.github.zachelks.proxkeep.data.ServerRepository
 import io.github.zachelks.proxkeep.ui.UiMessage
+import io.github.zachelks.proxkeep.ui.datacenter.CollectionSpec
 import io.github.zachelks.proxkeep.ui.lifecycle.Loadable
 import io.github.zachelks.proxkeep.ui.toUiMessage
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -168,7 +169,7 @@ class SchemaEditViewModel(
 
         /** The names in a path template, such as `node` and `iface` in `/nodes/{node}/network/{iface}`. */
         fun pathParameters(template: String): Set<String> =
-            Regex("\\{([^}]+)}").findAll(template).map { it.groupValues[1] }.toSet()
+            CollectionSpec.PLACEHOLDER.findAll(template).map { it.groupValues[1] }.toSet()
 
         /**
          * The values of an API object as form text. Yes-or-no values become

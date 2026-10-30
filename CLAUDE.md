@@ -139,6 +139,7 @@ App tests are JVM unit tests in `app/src/test`. Choose the lightest kind that wo
 - Write user-facing text, commit messages and pull request descriptions in plain, short sentences. Commits have an imperative subject and a body explaining why. Pull request bodies have the sections "What's included", "Checks", "How to test" and "Known limits".
 - Status colors are always paired with an icon or label (`ui/theme/StatusColors.kt`). Graceful shutdown stays visually and spatially separate from stop and reset, which ask for confirmation.
 - Charts (`ui/components/UsageChart.kt`) show one measure on one scale, at most two series, in the fixed colors from `ui/theme/ChartColors.kt`, with a text description for screen readers. Never put two scales on one chart.
+- Android compiles regular expressions with ICU, which refuses a `{` or `}` that is neither escaped nor part of a quantifier; the JVM running the tests accepts them. Escape both, as in `\{([^}]+)\}`. `RegexPortabilityTest` checks every pattern in the sources.
 - Proxmox returns loosely typed JSON, such as `0`/`1` booleans and numbers as strings. Use the serializers in `core/api/json/LenientSerializers.kt` for new model fields.
 - Licensing: the app is GPLv3 because the Termux code is GPLv3 only. ProxKeep's own code is GPLv3-or-later. Don't use the Proxmox name or logo as the app's name or icon.
 
