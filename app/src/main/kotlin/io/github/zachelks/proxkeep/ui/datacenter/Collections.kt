@@ -55,9 +55,15 @@ data class CollectionSpec(
         itemPath?.let { fill(it, args + (itemParam!! to id)) }
 
     companion object {
+        /**
+         * A `{name}` placeholder in a path template. Android's regex engine
+         * refuses a `}` that is not escaped, though the JVM's accepts it.
+         */
+        val PLACEHOLDER = Regex("""\{([^}]+)\}""")
+
         /** Fills `{name}` placeholders with [args], each kept to one path segment. */
         fun fill(template: String, args: Map<String, String>): String =
-            Regex("\\{([^}]+)}").replace(template) { match -> args[match.groupValues[1]]?.let(::encodePathValue) ?: match.value }
+            PLACEHOLDER.replace(template) { match -> args[match.groupValues[1]]?.let(::encodePathValue) ?: match.value }
     }
 }
 
